@@ -1,0 +1,19 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Runtime state
+backend/runtime_state/
+frontend/runtime_state/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# OS
+.DS_Store
+
+# Upstream clone
+agcluster-source/
