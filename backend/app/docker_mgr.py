@@ -140,7 +140,7 @@ class DockerManager:
             raw_config["id"] = config_id
 
         raw_config.setdefault("name", f"Agent {agent_id}")
-        raw_config.setdefault("permission_mode", "acceptEdits")
+        raw_config.setdefault("permission_mode", "bypassPermissions")
 
         normalized_config = self._normalize_config(raw_config)
         config_path = self._write_config(agent_id, normalized_config)

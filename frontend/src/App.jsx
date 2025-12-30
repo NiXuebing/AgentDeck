@@ -68,7 +68,7 @@ function App() {
     name: '',
     systemPrompt: '',
     allowedTools: DEFAULT_TOOLS,
-    permissionMode: 'acceptEdits',
+    permissionMode: 'bypassPermissions',
     maxTurns: '40',
     mcpServersJson: '',
     mcpEnvJson: '',

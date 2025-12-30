@@ -1,0 +1,117 @@
+[
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/cost-tracking",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/cost-tracking.html",
+    "title": "Tracking Costs and Usage - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/custom-tools",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/custom-tools.html",
+    "title": "Custom Tools - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/file-checkpointing",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/file-checkpointing.html",
+    "title": "Rewind file changes with checkpointing - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/hooks",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/hooks.html",
+    "title": "Intercept and control agent behavior with hooks - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/hosting",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/hosting.html",
+    "title": "Hosting the Agent SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/mcp",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/mcp.html",
+    "title": "MCP in the SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/migration-guide",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/migration-guide.html",
+    "title": "Migrate to Claude Agent SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/modifying-system-prompts",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/modifying-system-prompts.html",
+    "title": "Modifying system prompts - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/overview",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/overview.html",
+    "title": "Agent SDK overview - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/permissions",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/permissions.html",
+    "title": "Handling Permissions - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/plugins",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/plugins.html",
+    "title": "Plugins in the SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/python",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/python.html",
+    "title": "Agent SDK reference - Python - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/quickstart",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/quickstart.html",
+    "title": "Quickstart - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/secure-deployment",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/secure-deployment.html",
+    "title": "Securely deploying AI agents - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/sessions",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/sessions.html",
+    "title": "Session Management - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/skills",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/skills.html",
+    "title": "Agent Skills in the SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/slash-commands",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/slash-commands.html",
+    "title": "Slash Commands in the SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode.html",
+    "title": "Streaming Input - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/structured-outputs",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/structured-outputs.html",
+    "title": "Structured outputs in the SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/subagents",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/subagents.html",
+    "title": "Subagents in the SDK - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/todo-tracking",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/todo-tracking.html",
+    "title": "Todo Lists - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/typescript",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/typescript.html",
+    "title": "Agent SDK reference - TypeScript - Claude Docs"
+  },
+  {
+    "url": "https://platform.claude.com/docs/en/agent-sdk/typescript-v2-preview",
+    "local_path": "platform.claude.com/docs/en/agent-sdk/typescript-v2-preview.html",
+    "title": "TypeScript SDK V2 interface (preview) - Claude Docs"
+  }
+]
