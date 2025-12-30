@@ -43,7 +43,6 @@ cleanup_task: Optional[asyncio.Task] = None
 
 
 class SpawnAgentRequest(BaseModel):
-    api_key: Optional[str] = None
     config: Dict[str, Any] = Field(default_factory=dict)
     mcp_env: Optional[Dict[str, Dict[str, str]]] = None
 
@@ -54,7 +53,6 @@ class QueryAgentRequest(BaseModel):
 
 
 class LaunchRequest(BaseModel):
-    api_key: Optional[str] = None
     config_id: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
     mcp_env: Optional[Dict[str, Dict[str, str]]] = None
@@ -96,7 +94,6 @@ class AgentChatRequest(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    api_key: Optional[str] = None
     mcp_env: Optional[Dict[str, Dict[str, str]]] = None
 
 
@@ -125,16 +122,11 @@ def record_to_info(record: AgentRecord) -> AgentInfo:
     )
 
 
-def resolve_api_key(api_key: Optional[str], authorization: Optional[str]) -> Optional[str]:
-    if api_key:
-        return api_key
-
-    if authorization:
-        parts = authorization.split(" ", 1)
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            return parts[1].strip()
-
-    return os.environ.get("ANTHROPIC_API_KEY")
+def require_env_api_key() -> str:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY is required")
+    return api_key
 
 
 def resolve_session_id(requested: Optional[str], header_session_id: Optional[str]) -> Optional[str]:
@@ -192,10 +184,8 @@ def health_check() -> Dict[str, str]:
 
 
 @app.post("/api/agents", response_model=AgentInfo)
-async def spawn_agent(request: SpawnAgentRequest, authorization: Optional[str] = Header(default=None)):
-    api_key = resolve_api_key(request.api_key, authorization)
-    if not api_key:
-        raise HTTPException(status_code=400, detail="api_key is required")
+async def spawn_agent(request: SpawnAgentRequest):
+    api_key = require_env_api_key()
 
     try:
         _session_record, agent_record = await run_in_threadpool(
@@ -214,10 +204,8 @@ async def list_agents():
 
 
 @app.post("/api/agents/launch", response_model=LaunchResponse)
-async def launch_agent(request: LaunchRequest, authorization: Optional[str] = Header(default=None)):
-    api_key = resolve_api_key(request.api_key, authorization)
-    if not api_key:
-        raise HTTPException(status_code=400, detail="api_key is required")
+async def launch_agent(request: LaunchRequest):
+    api_key = require_env_api_key()
 
     if not request.config_id and not request.config:
         raise HTTPException(status_code=400, detail="config_id or config is required")
@@ -335,16 +323,17 @@ async def start_session_container(
     if not session_mgr.authorize(session_id, x_session_token, authorization):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    mcp_env = payload.mcp_env if payload else None
     try:
-        api_key = resolve_api_key(payload.api_key if payload else None, authorization)
-        agent_record = await run_in_threadpool(
-            session_mgr.start_session,
-            session_id,
-            api_key,
-            payload.mcp_env if payload else None,
-        )
+        agent_record = await run_in_threadpool(session_mgr.start_session, session_id, None, mcp_env)
     except KeyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=409,
+                detail="Agent container missing; ANTHROPIC_API_KEY is required to recreate it",
+            ) from exc
+        agent_record = await run_in_threadpool(session_mgr.start_session, session_id, api_key, mcp_env)
 
     return record_to_info(agent_record)
 
@@ -420,16 +409,17 @@ async def start_agent_container(
     if not session_mgr.authorize(session_id, x_session_token, authorization):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    mcp_env = payload.mcp_env if payload else None
     try:
-        api_key = resolve_api_key(payload.api_key if payload else None, authorization)
-        agent_record = await run_in_threadpool(
-            session_mgr.start_session,
-            session_id,
-            api_key,
-            payload.mcp_env if payload else None,
-        )
+        agent_record = await run_in_threadpool(session_mgr.start_session, session_id, None, mcp_env)
     except KeyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=409,
+                detail="Agent container missing; ANTHROPIC_API_KEY is required to recreate it",
+            ) from exc
+        agent_record = await run_in_threadpool(session_mgr.start_session, session_id, api_key, mcp_env)
 
     return record_to_info(agent_record)
 

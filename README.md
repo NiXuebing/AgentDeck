@@ -49,7 +49,7 @@ backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Set `ANTHROPIC_API_KEY` in your shell (or `.env`), or pass `api_key` per request.
+Set `ANTHROPIC_API_KEY` in your shell (or `.env`). The backend uses this key for all agent lifecycle operations.
 
 To use a custom Anthropic-compatible endpoint, copy `.env.example` to `.env` and update the `ANTHROPIC_*` values. The backend will load `.env` and pass the supported keys into each container.
 
@@ -95,7 +95,6 @@ npm run dev
 curl -X POST http://localhost:8000/api/agents \
   -H "Content-Type: application/json" \
   -d '{
-    "api_key": "sk-ant-...",
     "config": {
       "id": "code-assistant",
       "name": "Code Assistant",
@@ -120,13 +119,7 @@ curl -X POST http://localhost:8000/api/agents/{agent_id}/start \
   -H "X-Session-Token: <session_token>"
 ```
 
-If the container is missing, the backend will attempt to recreate it using `ANTHROPIC_API_KEY` from `.env`. You can also pass a key explicitly:
-
-```bash
-curl -X POST http://localhost:8000/api/agents/{agent_id}/start \
-  -H "X-Session-Token: <session_token>" \
-  -H "Authorization: Bearer sk-ant-..."
-```
+If the container is missing, the backend will attempt to recreate it using `ANTHROPIC_API_KEY` from `.env`.
 
 ### Delete an agent (removes container + workspace volume)
 
@@ -141,7 +134,6 @@ curl -X DELETE http://localhost:8000/api/agents/{agent_id} \
 curl -X POST http://localhost:8000/api/agents/launch \
   -H "Content-Type: application/json" \
   -d '{
-    "api_key": "sk-ant-...",
     "config": {
       "id": "code-assistant",
       "name": "Code Assistant",

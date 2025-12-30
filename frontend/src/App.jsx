@@ -64,7 +64,6 @@ function App() {
   const [messageInput, setMessageInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [form, setForm] = useState({
-    apiKey: '',
     configId: '',
     name: '',
     systemPrompt: '',
@@ -387,9 +386,6 @@ function App() {
     if (parsedConfig.id) {
       payload.config_id = parsedConfig.id
     }
-    if (form.apiKey.trim()) {
-      payload.api_key = form.apiKey.trim()
-    }
     if (mcpEnvParsed.data) {
       payload.mcp_env = mcpEnvParsed.data
     }
@@ -406,7 +402,6 @@ function App() {
         throw new Error(detail || `Failed to launch agent (${response.status})`)
       }
       const created = await response.json()
-      setForm((prev) => ({ ...prev, apiKey: '' }))
       setSessionByAgent((prev) => ({
         ...prev,
         [created.agent_id]: {
@@ -729,19 +724,6 @@ function App() {
                 {mcpEnvParsed.error ? (
                   <p className="text-xs text-red-600">{mcpEnvParsed.error}</p>
                 ) : null}
-              </div>
-              <div className="flex flex-col gap-2 md:col-span-2">
-                <label className={labelClass}>Anthropic API Key (optional)</label>
-                <input
-                  className={inputClass}
-                  type="password"
-                  placeholder="sk-ant-..."
-                  value={form.apiKey}
-                  onChange={handleFieldChange('apiKey')}
-                />
-                <p className="text-xs text-neutral-500">
-                  Leave empty if the backend is configured with ANTHROPIC_API_KEY.
-                </p>
               </div>
             </div>
 
