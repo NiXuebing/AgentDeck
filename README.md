@@ -53,6 +53,11 @@ Set `ANTHROPIC_API_KEY` in your shell (or `.env`), or pass `api_key` per request
 
 To use a custom Anthropic-compatible endpoint, copy `.env.example` to `.env` and update the `ANTHROPIC_*` values. The backend will load `.env` and pass the supported keys into each container.
 
+Optional session cleanup controls:
+
+- `AGENTDECK_SESSION_IDLE_MINUTES` (default: 60; set to 0 to disable)
+- `AGENTDECK_SESSION_SWEEP_SECONDS` (default: 60)
+
 ### 4) Frontend
 
 ```bash
@@ -69,6 +74,12 @@ npm run dev
 - `GET /health`
 - `GET /api/agents`
 - `POST /api/agents`
+- `POST /api/agents/launch`
+- `GET /api/agents/sessions`
+- `GET /api/agents/sessions/{session_id}`
+- `DELETE /api/agents/sessions/{session_id}`
+- `POST /api/agents/sessions/{session_id}/interrupt`
+- `POST /api/agents/chat`
 - `DELETE /api/agents/{agent_id}`
 - `WS /ws/agents/{agent_id}/logs`
 
@@ -93,6 +104,35 @@ curl -X POST http://localhost:8000/api/agents \
 
 ```bash
 curl -X DELETE http://localhost:8000/api/agents/{agent_id}
+```
+
+### Launch a session (recommended)
+
+```bash
+curl -X POST http://localhost:8000/api/agents/launch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "sk-ant-...",
+    "config": {
+      "id": "code-assistant",
+      "name": "Code Assistant",
+      "allowed_tools": ["Read", "Write", "Bash"],
+      "permission_mode": "acceptEdits",
+      "max_turns": 40
+    }
+  }'
+```
+
+The response includes `session_id` and `session_token`. Pass the token to chat, interrupt, or delete:
+
+```bash
+curl -N http://localhost:8000/api/agents/chat \
+  -H "Content-Type: application/json" \
+  -H "X-Session-Token: <session_token>" \
+  -d '{
+    "sessionId": "<session_id>",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
 ```
 
 ## Notes

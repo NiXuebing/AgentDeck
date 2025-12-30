@@ -42,6 +42,7 @@ class AgentRecord:
     created_at: datetime
     config_path: Path
     workspace_volume: str
+    session_id: Optional[str] = None
     host_port: Optional[int] = None
 
 
@@ -87,13 +88,20 @@ class DockerManager:
         return config_path
 
     def _build_env(
-        self, agent_id: str, api_key: str, mcp_env: Optional[Dict[str, Dict[str, str]]]
+        self,
+        agent_id: str,
+        api_key: str,
+        mcp_env: Optional[Dict[str, Dict[str, str]]],
+        session_id: Optional[str] = None,
     ) -> Dict[str, str]:
         env: Dict[str, str] = {
             "AGENT_ID": agent_id,
             "ANTHROPIC_API_KEY": api_key,
             "CONFIG_PATH": "/config/agent-config.json",
         }
+
+        if session_id:
+            env["SESSION_ID"] = session_id
 
         for key in PASSTHROUGH_ENV_KEYS:
             value = os.environ.get(key)
@@ -112,7 +120,11 @@ class DockerManager:
         return env
 
     def spawn_agent(
-        self, api_key: str, config: Optional[Dict[str, Any]] = None, mcp_env: Optional[Dict[str, Dict[str, str]]] = None
+        self,
+        api_key: str,
+        config: Optional[Dict[str, Any]] = None,
+        mcp_env: Optional[Dict[str, Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
     ) -> AgentRecord:
         if not api_key:
             raise ValueError("api_key is required")
@@ -132,7 +144,7 @@ class DockerManager:
         config_path = self._write_config(agent_id, normalized_config)
         workspace_volume = f"agentdeck-workspace-{agent_id}"
 
-        env = self._build_env(agent_id, api_key, mcp_env)
+        env = self._build_env(agent_id, api_key, mcp_env, session_id=session_id)
 
         container = self.client.containers.run(
             image=self.image_name,
@@ -170,6 +182,7 @@ class DockerManager:
             created_at=datetime.now(timezone.utc),
             config_path=config_path,
             workspace_volume=workspace_volume,
+            session_id=session_id,
             host_port=host_port,
         )
 

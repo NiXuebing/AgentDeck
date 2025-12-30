@@ -10,12 +10,13 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 
 from .docker_mgr import AgentRecord, DockerManager
+from .session_mgr import SessionManager
 
 
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,10 @@ app.add_middleware(
 
 
 docker_mgr = DockerManager()
+SESSION_IDLE_MINUTES = int(os.environ.get("AGENTDECK_SESSION_IDLE_MINUTES", "60"))
+SESSION_SWEEP_SECONDS = int(os.environ.get("AGENTDECK_SESSION_SWEEP_SECONDS", "60"))
+session_mgr = SessionManager(docker_mgr, idle_minutes=SESSION_IDLE_MINUTES)
+cleanup_task: Optional[asyncio.Task] = None
 
 
 class SpawnAgentRequest(BaseModel):
@@ -48,31 +53,76 @@ class QueryAgentRequest(BaseModel):
     history: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class LaunchRequest(BaseModel):
+    api_key: Optional[str] = None
+    config_id: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    mcp_env: Optional[Dict[str, Dict[str, str]]] = None
+
+
+class LaunchResponse(BaseModel):
+    session_id: str
+    session_token: str
+    agent_id: str
+    config_id: str
+    status: str
+    created_at: datetime
+
+
+class SessionInfo(BaseModel):
+    session_id: str
+    agent_id: str
+    config_id: str
+    status: str
+    created_at: datetime
+    last_active: datetime
+
+
+class SessionListResponse(BaseModel):
+    sessions: List[SessionInfo]
+    total: int
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AgentChatRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    messages: List[ChatMessage]
+    session_id: Optional[str] = Field(default=None, alias="sessionId")
+
+
 class AgentInfo(BaseModel):
     agent_id: str
     config_id: str
     container_id: str
     container_name: str
     status: str
+    session_id: Optional[str] = None
     host_port: Optional[int] = None
     created_at: datetime
 
 
 def record_to_info(record: AgentRecord) -> AgentInfo:
+    session_id = record.session_id or session_mgr.get_session_for_agent(record.agent_id)
     return AgentInfo(
         agent_id=record.agent_id,
         config_id=record.config_id,
         container_id=record.container_id,
         container_name=record.container_name,
         status=record.status,
+        session_id=session_id,
         host_port=record.host_port,
         created_at=record.created_at,
     )
 
 
-def resolve_api_key(request: SpawnAgentRequest, authorization: Optional[str]) -> Optional[str]:
-    if request.api_key:
-        return request.api_key
+def resolve_api_key(api_key: Optional[str], authorization: Optional[str]) -> Optional[str]:
+    if api_key:
+        return api_key
 
     if authorization:
         parts = authorization.split(" ", 1)
@@ -82,6 +132,48 @@ def resolve_api_key(request: SpawnAgentRequest, authorization: Optional[str]) ->
     return os.environ.get("ANTHROPIC_API_KEY")
 
 
+def resolve_session_id(requested: Optional[str], header_session_id: Optional[str]) -> Optional[str]:
+    return requested or header_session_id
+
+
+def extract_user_message(messages: List[ChatMessage]) -> Optional[str]:
+    for message in reversed(messages):
+        if message.role == "user":
+            return message.content
+    return None
+
+
+@app.on_event("startup")
+async def start_session_cleanup():
+    global cleanup_task
+    if SESSION_IDLE_MINUTES <= 0:
+        return
+
+    async def cleanup_loop():
+        while True:
+            try:
+                idle_sessions = session_mgr.get_idle_sessions()
+                for session_id in idle_sessions:
+                    await asyncio.to_thread(session_mgr.cleanup_session, session_id)
+            except Exception as exc:
+                logger.warning("Session cleanup loop failed: %s", exc)
+            await asyncio.sleep(max(SESSION_SWEEP_SECONDS, 10))
+
+    cleanup_task = asyncio.create_task(cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def stop_session_cleanup():
+    global cleanup_task
+    if cleanup_task is None:
+        return
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+
+
 @app.get("/health")
 def health_check() -> Dict[str, str]:
     return {"status": "ok"}
@@ -89,18 +181,18 @@ def health_check() -> Dict[str, str]:
 
 @app.post("/api/agents", response_model=AgentInfo)
 async def spawn_agent(request: SpawnAgentRequest, authorization: Optional[str] = Header(default=None)):
-    api_key = resolve_api_key(request, authorization)
+    api_key = resolve_api_key(request.api_key, authorization)
     if not api_key:
         raise HTTPException(status_code=400, detail="api_key is required")
 
     try:
-        record = await run_in_threadpool(
-            docker_mgr.spawn_agent, api_key, request.config, request.mcp_env
+        _session_record, agent_record = await run_in_threadpool(
+            session_mgr.launch_session, api_key, request.config, request.mcp_env
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return record_to_info(record)
+    return record_to_info(agent_record)
 
 
 @app.get("/api/agents", response_model=List[AgentInfo])
@@ -109,10 +201,191 @@ async def list_agents():
     return [record_to_info(record) for record in records.values()]
 
 
+@app.post("/api/agents/launch", response_model=LaunchResponse)
+async def launch_agent(request: LaunchRequest, authorization: Optional[str] = Header(default=None)):
+    api_key = resolve_api_key(request.api_key, authorization)
+    if not api_key:
+        raise HTTPException(status_code=400, detail="api_key is required")
+
+    if not request.config_id and not request.config:
+        raise HTTPException(status_code=400, detail="config_id or config is required")
+
+    config = dict(request.config or {})
+    if request.config_id:
+        config["id"] = request.config_id
+
+    try:
+        session_record, agent_record = await run_in_threadpool(
+            session_mgr.launch_session, api_key, config, request.mcp_env
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return LaunchResponse(
+        session_id=session_record.session_id,
+        session_token=session_record.session_token,
+        agent_id=agent_record.agent_id,
+        config_id=agent_record.config_id,
+        status=agent_record.status,
+        created_at=session_record.created_at,
+    )
+
+
+@app.get("/api/agents/sessions", response_model=SessionListResponse)
+async def list_sessions():
+    sessions = session_mgr.list_sessions()
+    agents = await run_in_threadpool(docker_mgr.list_agents)
+    items: List[SessionInfo] = []
+    for session_id, record in sessions.items():
+        agent_record = agents.get(record.agent_id)
+        status = agent_record.status if agent_record else "missing"
+        items.append(
+            SessionInfo(
+                session_id=session_id,
+                agent_id=record.agent_id,
+                config_id=record.config_id,
+                status=status,
+                created_at=record.created_at,
+                last_active=record.last_active,
+            )
+        )
+    return SessionListResponse(sessions=items, total=len(items))
+
+
+@app.get("/api/agents/sessions/{session_id}", response_model=SessionInfo)
+async def get_session(session_id: str):
+    try:
+        record = session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    agents = await run_in_threadpool(docker_mgr.list_agents)
+    agent_record = agents.get(record.agent_id)
+    status = agent_record.status if agent_record else "missing"
+    return SessionInfo(
+        session_id=session_id,
+        agent_id=record.agent_id,
+        config_id=record.config_id,
+        status=status,
+        created_at=record.created_at,
+        last_active=record.last_active,
+    )
+
+
+@app.delete("/api/agents/sessions/{session_id}")
+async def stop_session(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    try:
+        session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    await run_in_threadpool(session_mgr.cleanup_session, session_id)
+    return {"status": "stopped", "session_id": session_id}
+
+
+@app.post("/api/agents/sessions/{session_id}/interrupt")
+async def interrupt_session(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    try:
+        record = session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    endpoint = await run_in_threadpool(docker_mgr.get_agent_endpoint, record.agent_id)
+    if not endpoint:
+        raise HTTPException(status_code=404, detail="agent not found or no endpoint")
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        response = await client.post(f"{endpoint}/interrupt")
+        response.raise_for_status()
+
+    session_mgr.touch(session_id)
+    return {"status": "interrupted", "session_id": session_id}
+
+
+@app.post("/api/agents/chat")
+async def agent_chat(
+    request: AgentChatRequest,
+    authorization: Optional[str] = Header(default=None),
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-ID"),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    session_id = resolve_session_id(request.session_id, x_session_id)
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    try:
+        record = session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    user_message = extract_user_message(request.messages)
+    if not user_message:
+        raise HTTPException(status_code=400, detail="No user message found")
+
+    endpoint = await run_in_threadpool(docker_mgr.get_agent_endpoint, record.agent_id)
+    if not endpoint:
+        raise HTTPException(status_code=404, detail="agent not found or no endpoint")
+
+    session_mgr.touch(session_id)
+    request_body = {
+        "query": user_message,
+        "history": [message.model_dump() for message in request.messages],
+    }
+
+    async def event_stream():
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream(
+                "POST",
+                f"{endpoint}/query",
+                json=request_body,
+                headers={"Accept": "text/event-stream"},
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    message = body.decode(errors="ignore").strip()
+                    error_payload = {"type": "error", "message": message or "agent query failed"}
+                    yield f"data: {json.dumps(error_payload)}\n\n".encode()
+                    return
+
+                async for chunk in resp.aiter_raw():
+                    yield chunk
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.delete("/api/agents/{agent_id}")
 async def stop_agent(agent_id: str):
     try:
-        await run_in_threadpool(docker_mgr.stop_agent, agent_id, True)
+        session_id = session_mgr.get_session_for_agent(agent_id)
+        if session_id:
+            await run_in_threadpool(session_mgr.cleanup_session, session_id)
+        else:
+            await run_in_threadpool(docker_mgr.stop_agent, agent_id, True)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -124,6 +397,10 @@ async def query_agent(agent_id: str, payload: QueryAgentRequest):
     endpoint = await run_in_threadpool(docker_mgr.get_agent_endpoint, agent_id)
     if not endpoint:
         raise HTTPException(status_code=404, detail="agent not found or no endpoint")
+
+    session_id = session_mgr.get_session_for_agent(agent_id)
+    if session_id:
+        session_mgr.touch(session_id)
 
     url = f"{endpoint}/query"
     request_body = payload.model_dump()

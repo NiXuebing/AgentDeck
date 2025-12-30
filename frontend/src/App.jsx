@@ -8,6 +8,7 @@ const WS_BASE = API_BASE
   : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
 
 const DEFAULT_TOOLS = 'Bash,Read,Write,Edit,Grep'
+const SESSION_STORE_KEY = 'agentdeck.sessions'
 
 const inputClass =
   'w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-2 text-sm text-neutral-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
@@ -38,6 +39,20 @@ const formatTime = (value) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+const readSessionStore = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    return JSON.parse(window.localStorage.getItem(SESSION_STORE_KEY) || '{}')
+  } catch (error) {
+    return {}
+  }
+}
+
+const writeSessionStore = (value) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SESSION_STORE_KEY, JSON.stringify(value))
+}
+
 function App() {
   const [agents, setAgents] = useState([])
   const [selectedAgentId, setSelectedAgentId] = useState('')
@@ -45,6 +60,7 @@ function App() {
   const [launching, setLaunching] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [chatByAgent, setChatByAgent] = useState({})
+  const [sessionByAgent, setSessionByAgent] = useState(() => readSessionStore())
   const [messageInput, setMessageInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [form, setForm] = useState({
@@ -109,6 +125,19 @@ function App() {
       }
       const data = await response.json()
       setAgents(data)
+      setSessionByAgent((prev) => {
+        const next = { ...prev }
+        let changed = false
+        data.forEach((agent) => {
+          if (!agent.session_id) return
+          const current = next[agent.agent_id] || {}
+          if (current.sessionId !== agent.session_id) {
+            next[agent.agent_id] = { ...current, sessionId: agent.session_id }
+            changed = true
+          }
+        })
+        return changed ? next : prev
+      })
       if (data.length && !selectedAgentId) {
         setSelectedAgentId(data[0].agent_id)
       }
@@ -124,6 +153,10 @@ function App() {
     const interval = setInterval(fetchAgents, 6000)
     return () => clearInterval(interval)
   }, [fetchAgents])
+
+  useEffect(() => {
+    writeSessionStore(sessionByAgent)
+  }, [sessionByAgent])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -218,11 +251,16 @@ function App() {
     })
   }
 
-  const streamQuery = async (agentId, query) => {
-    const response = await fetch(`${API_BASE}/api/agents/${agentId}/query`, {
+  const streamChat = async (agentId, sessionId, sessionToken, messages) => {
+    const headers = { 'Content-Type': 'application/json' }
+    if (sessionToken) {
+      headers['X-Session-Token'] = sessionToken
+    }
+
+    const response = await fetch(`${API_BASE}/api/agents/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, history: [] }),
+      headers,
+      body: JSON.stringify({ sessionId, messages }),
     })
 
     if (!response.ok || !response.body) {
@@ -288,10 +326,19 @@ function App() {
       setErrorMessage('Select an agent before sending a message.')
       return
     }
+    const session = sessionByAgent[selectedAgentId]
+    if (!session?.sessionId || !session?.sessionToken) {
+      setErrorMessage('Selected agent is missing a session token. Relaunch to create one.')
+      return
+    }
     if (!messageInput.trim()) return
     if (isStreaming) return
 
     const query = messageInput.trim()
+    const history = (chatByAgent[selectedAgentId] || [])
+      .filter((message) => (message.role === 'user' || message.role === 'assistant') && !message.streaming)
+      .map((message) => ({ role: message.role, content: message.content }))
+    const outgoingMessages = [...history, { role: 'user', content: query }]
     setMessageInput('')
     setErrorMessage('')
     setIsStreaming(true)
@@ -303,7 +350,7 @@ function App() {
     ])
 
     try {
-      await streamQuery(selectedAgentId, query)
+      await streamChat(selectedAgentId, session.sessionId, session.sessionToken, outgoingMessages)
     } catch (error) {
       updateMessages(selectedAgentId, (current) => [
         ...current,
@@ -326,7 +373,11 @@ function App() {
       return
     }
 
-    const payload = { config: JSON.parse(configPreview) }
+    const parsedConfig = JSON.parse(configPreview)
+    const payload = { config: parsedConfig }
+    if (parsedConfig.id) {
+      payload.config_id = parsedConfig.id
+    }
     if (form.apiKey.trim()) {
       payload.api_key = form.apiKey.trim()
     }
@@ -336,7 +387,7 @@ function App() {
 
     setLaunching(true)
     try {
-      const response = await fetch(`${API_BASE}/api/agents`, {
+      const response = await fetch(`${API_BASE}/api/agents/launch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -347,6 +398,13 @@ function App() {
       }
       const created = await response.json()
       setForm((prev) => ({ ...prev, apiKey: '' }))
+      setSessionByAgent((prev) => ({
+        ...prev,
+        [created.agent_id]: {
+          sessionId: created.session_id,
+          sessionToken: created.session_token,
+        },
+      }))
       await fetchAgents()
       setSelectedAgentId(created.agent_id)
     } catch (error) {
@@ -358,12 +416,25 @@ function App() {
 
   const handleStop = async (agentId) => {
     setErrorMessage('')
+    const session = sessionByAgent[agentId]
+    const headers = {}
+    let url = `${API_BASE}/api/agents/${agentId}`
+    if (session?.sessionId && session.sessionToken) {
+      url = `${API_BASE}/api/agents/sessions/${session.sessionId}`
+      headers['X-Session-Token'] = session.sessionToken
+    }
     try {
-      const response = await fetch(`${API_BASE}/api/agents/${agentId}`, { method: 'DELETE' })
+      const response = await fetch(url, { method: 'DELETE', headers })
       if (!response.ok) {
         const detail = await response.text()
         throw new Error(detail || `Failed to stop agent (${response.status})`)
       }
+      setSessionByAgent((prev) => {
+        if (!prev[agentId]) return prev
+        const next = { ...prev }
+        delete next[agentId]
+        return next
+      })
       await fetchAgents()
       if (selectedAgentId === agentId) {
         setSelectedAgentId('')
