@@ -39,12 +39,52 @@ class AgentServer:
         self.config = None
         self.sdk_client = None  # Will be initialized in async context
         self.last_tool_name = None  # Track the last tool used for completion events
+        self.workspace_root = Path("/workspace")
+        self.session_state_path = self.workspace_root / ".agentdeck" / "sdk-session.json"
+        self.sdk_session_id = self._load_sdk_session_id()
 
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable is required")
 
         # Load configuration
         self._load_config()
+
+    def _load_sdk_session_id(self) -> Optional[str]:
+        if not self.session_state_path.exists():
+            return None
+
+        try:
+            payload = json.loads(self.session_state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to read SDK session state: %s", exc)
+            return None
+
+        session_id = payload.get("session_id") if isinstance(payload, dict) else None
+        if session_id:
+            logger.info("Loaded SDK session id: %s", session_id)
+        return session_id
+
+    def _persist_sdk_session_id(self, session_id: str) -> None:
+        if not session_id:
+            return
+
+        if session_id == self.sdk_session_id and self.session_state_path.exists():
+            return
+
+        self.session_state_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "session_id": session_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.session_state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self.sdk_session_id = session_id
+
+    def _clear_sdk_session_id(self) -> None:
+        self.sdk_session_id = None
+        try:
+            self.session_state_path.unlink()
+        except FileNotFoundError:
+            pass
 
     def _load_config(self):
         """Load agent configuration from JSON env var, mounted file, or legacy env vars"""
@@ -96,6 +136,19 @@ class AgentServer:
         """Initialize Claude SDK client (call once at startup)"""
         try:
             from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+
+            async def _start_client(options_payload: Dict[str, Any]) -> None:
+                options = ClaudeAgentOptions(**options_payload)
+                client = ClaudeSDKClient(options)
+                try:
+                    await client.__aenter__()
+                except Exception:
+                    try:
+                        await client.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+                    raise
+                self.sdk_client = client
 
             # Build options from config
             options_dict = {
@@ -153,12 +206,28 @@ class AgentServer:
                 except ImportError:
                     logger.debug("HookMatcher not available in current SDK version")
 
-            # Configure Claude SDK options
-            options = ClaudeAgentOptions(**options_dict)
-
-            # Create client (maintains session across queries)
-            self.sdk_client = ClaudeSDKClient(options)
-            await self.sdk_client.__aenter__()
+            resume_session = self.sdk_session_id
+            if resume_session:
+                options_with_resume = {
+                    **options_dict,
+                    "resume": resume_session,
+                    "fork_session": False,
+                }
+                try:
+                    await _start_client(options_with_resume)
+                    logger.info("Resumed SDK session %s", resume_session)
+                except TypeError as exc:
+                    if "resume" in str(exc) or "fork_session" in str(exc):
+                        logger.warning("SDK options do not support resume; starting new session")
+                        await _start_client(options_dict)
+                    else:
+                        raise
+                except Exception as exc:
+                    logger.warning("Failed to resume SDK session %s: %s", resume_session, exc)
+                    self._clear_sdk_session_id()
+                    await _start_client(options_dict)
+            else:
+                await _start_client(options_dict)
 
             logger.info(f"Claude SDK client initialized for agent {self.agent_id}")
             logger.info(
@@ -351,10 +420,16 @@ class AgentServer:
 
             # ===== SYSTEM/DEBUG (skip in production responses) =====
             if SystemMessage and isinstance(message, SystemMessage):
+                session_id = getattr(message, "session_id", None)
+                data = getattr(message, "data", None)
+                if not session_id and isinstance(data, dict):
+                    session_id = data.get("session_id")
+                if session_id and getattr(message, "subtype", "") == "init":
+                    self._persist_sdk_session_id(session_id)
                 return {
                     "type": "system",
                     "subtype": getattr(message, "subtype", ""),
-                    "session_id": getattr(message, "data", {}).get("session_id", ""),
+                    "session_id": session_id or "",
                 }
 
             # ===== USER MESSAGES (may contain ToolResultBlock) =====

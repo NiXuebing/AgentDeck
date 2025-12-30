@@ -78,9 +78,15 @@ npm run dev
 - `GET /api/agents/sessions`
 - `GET /api/agents/sessions/{session_id}`
 - `DELETE /api/agents/sessions/{session_id}`
+- `POST /api/agents/sessions/{session_id}/stop`
+- `POST /api/agents/sessions/{session_id}/start`
+- `POST /api/agents/sessions/{session_id}/rotate-token`
 - `POST /api/agents/sessions/{session_id}/interrupt`
 - `POST /api/agents/chat`
 - `DELETE /api/agents/{agent_id}`
+- `POST /api/agents/{agent_id}/stop`
+- `POST /api/agents/{agent_id}/start`
+- `POST /api/agents/{agent_id}/rotate-token`
 - `WS /ws/agents/{agent_id}/logs`
 
 ### Create an agent
@@ -100,10 +106,33 @@ curl -X POST http://localhost:8000/api/agents \
   }'
 ```
 
-### Stop an agent
+### Stop an agent (keeps workspace volume)
 
 ```bash
-curl -X DELETE http://localhost:8000/api/agents/{agent_id}
+curl -X POST http://localhost:8000/api/agents/{agent_id}/stop \
+  -H "X-Session-Token: <session_token>"
+```
+
+### Start an agent
+
+```bash
+curl -X POST http://localhost:8000/api/agents/{agent_id}/start \
+  -H "X-Session-Token: <session_token>"
+```
+
+If the container is missing, the backend will attempt to recreate it using `ANTHROPIC_API_KEY` from `.env`. You can also pass a key explicitly:
+
+```bash
+curl -X POST http://localhost:8000/api/agents/{agent_id}/start \
+  -H "X-Session-Token: <session_token>" \
+  -H "Authorization: Bearer sk-ant-..."
+```
+
+### Delete an agent (removes container + workspace volume)
+
+```bash
+curl -X DELETE http://localhost:8000/api/agents/{agent_id} \
+  -H "X-Session-Token: <session_token>"
 ```
 
 ### Launch a session (recommended)
@@ -135,9 +164,18 @@ curl -N http://localhost:8000/api/agents/chat \
   }'
 ```
 
+### Rotate session token
+
+```bash
+curl -X POST http://localhost:8000/api/agents/sessions/{session_id}/rotate-token \
+  -H "X-Session-Token: <session_token>"
+```
+
 ## Notes
 
 - Agent config is serialized to `agent-config.json` and mounted at `/config/agent-config.json` inside the container.
 - MCP credentials should be supplied in the `mcp_env` object; the backend prevents reserved env overrides.
 - The worker image uses `backend/runtime_base/container/agent_server.py` and `backend/runtime_base/container/requirements.txt`.
 - Env passthrough to containers: `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_DEFAULT_*`, `ANTHROPIC_MODEL`.
+- Agent/session registry is persisted in `backend/runtime_state/registry.json` to survive backend restarts.
+- Claude SDK session state is saved at `/workspace/.agentdeck/sdk-session.json` to resume conversations across restarts.

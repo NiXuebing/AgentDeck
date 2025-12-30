@@ -114,6 +114,11 @@ function App() {
     () => (selectedAgentId ? chatByAgent[selectedAgentId] || [] : []),
     [chatByAgent, selectedAgentId]
   )
+  const selectedAgent = useMemo(
+    () => agents.find((agent) => agent.agent_id === selectedAgentId),
+    [agents, selectedAgentId]
+  )
+  const isAgentRunning = selectedAgent?.status === 'running'
 
   const fetchAgents = useCallback(async () => {
     setLoading(true)
@@ -326,6 +331,10 @@ function App() {
       setErrorMessage('Select an agent before sending a message.')
       return
     }
+    if (!selectedAgent || selectedAgent.status !== 'running') {
+      setErrorMessage('Agent is not running. Start the agent before chatting.')
+      return
+    }
     const session = sessionByAgent[selectedAgentId]
     if (!session?.sessionId || !session?.sessionToken) {
       setErrorMessage('Selected agent is missing a session token. Relaunch to create one.')
@@ -417,17 +426,65 @@ function App() {
   const handleStop = async (agentId) => {
     setErrorMessage('')
     const session = sessionByAgent[agentId]
-    const headers = {}
-    let url = `${API_BASE}/api/agents/${agentId}`
-    if (session?.sessionId && session.sessionToken) {
-      url = `${API_BASE}/api/agents/sessions/${session.sessionId}`
-      headers['X-Session-Token'] = session.sessionToken
+    if (!session?.sessionToken) {
+      setErrorMessage('Missing session token for stop.')
+      return
     }
     try {
-      const response = await fetch(url, { method: 'DELETE', headers })
+      const response = await fetch(`${API_BASE}/api/agents/${agentId}/stop`, {
+        method: 'POST',
+        headers: { 'X-Session-Token': session.sessionToken },
+      })
       if (!response.ok) {
         const detail = await response.text()
         throw new Error(detail || `Failed to stop agent (${response.status})`)
+      }
+      await fetchAgents()
+    } catch (error) {
+      setErrorMessage(error.message)
+    }
+  }
+
+  const handleStart = async (agentId) => {
+    setErrorMessage('')
+    const session = sessionByAgent[agentId]
+    if (!session?.sessionToken) {
+      setErrorMessage('Missing session token for start.')
+      return
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/agents/${agentId}/start`, {
+        method: 'POST',
+        headers: { 'X-Session-Token': session.sessionToken },
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || `Failed to start agent (${response.status})`)
+      }
+      await fetchAgents()
+    } catch (error) {
+      setErrorMessage(error.message)
+    }
+  }
+
+  const handleDelete = async (agentId) => {
+    setErrorMessage('')
+    const session = sessionByAgent[agentId]
+    if (!session?.sessionToken) {
+      setErrorMessage('Missing session token for delete.')
+      return
+    }
+    if (!window.confirm('Delete this agent and its workspace volume?')) {
+      return
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+        method: 'DELETE',
+        headers: { 'X-Session-Token': session.sessionToken },
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || `Failed to delete agent (${response.status})`)
       }
       setSessionByAgent((prev) => {
         if (!prev[agentId]) return prev
@@ -500,10 +557,16 @@ function App() {
               ) : (
                 agents.map((agent) => {
                   const isSelected = selectedAgentId === agent.agent_id
-                  const statusStyle =
+                  const normalizedStatus =
                     agent.status === 'running'
+                      ? 'running'
+                      : ['stopped', 'exited', 'created'].includes(agent.status)
+                        ? 'stopped'
+                        : 'missing'
+                  const statusStyle =
+                    normalizedStatus === 'running'
                       ? { badge: 'status-running', dot: 'bg-emerald-600' }
-                      : agent.status === 'stopped'
+                      : normalizedStatus === 'stopped'
                         ? { badge: 'status-stopped', dot: 'bg-orange-500' }
                         : { badge: 'status-missing', dot: 'bg-neutral-500' }
                   return (
@@ -533,12 +596,29 @@ function App() {
                       </button>
                       <div className="mt-3 flex items-center justify-between text-xs text-neutral-500">
                         <span>container</span>
-                        <button
-                          className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
-                          onClick={() => handleStop(agent.agent_id)}
-                        >
-                          Stop
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {normalizedStatus === 'running' ? (
+                            <button
+                              className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
+                              onClick={() => handleStop(agent.agent_id)}
+                            >
+                              Stop
+                            </button>
+                          ) : (
+                            <button
+                              className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
+                              onClick={() => handleStart(agent.agent_id)}
+                            >
+                              Start
+                            </button>
+                          )}
+                          <button
+                            className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
+                            onClick={() => handleDelete(agent.agent_id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
@@ -726,7 +806,11 @@ function App() {
                 <textarea
                   className={`${inputClass} min-h-[48px]`}
                   placeholder={
-                    selectedAgentId ? 'Ask the agent something...' : 'Select an agent to start chatting.'
+                    selectedAgentId
+                      ? isAgentRunning
+                        ? 'Ask the agent something...'
+                        : 'Start the agent to begin chatting.'
+                      : 'Select an agent to start chatting.'
                   }
                   value={messageInput}
                   onChange={(event) => setMessageInput(event.target.value)}
@@ -736,12 +820,12 @@ function App() {
                       handleSendMessage()
                     }
                   }}
-                  disabled={!selectedAgentId || isStreaming}
+                  disabled={!selectedAgentId || !isAgentRunning || isStreaming}
                 />
                 <button
                   className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
                   onClick={handleSendMessage}
-                  disabled={!selectedAgentId || isStreaming || !messageInput.trim()}
+                  disabled={!selectedAgentId || !isAgentRunning || isStreaming || !messageInput.trim()}
                 >
                   {isStreaming ? 'Sending...' : 'Send'}
                 </button>

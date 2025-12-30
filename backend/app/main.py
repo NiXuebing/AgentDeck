@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import StreamingResponse
@@ -95,6 +95,11 @@ class AgentChatRequest(BaseModel):
     session_id: Optional[str] = Field(default=None, alias="sessionId")
 
 
+class ResumeRequest(BaseModel):
+    api_key: Optional[str] = None
+    mcp_env: Optional[Dict[str, Dict[str, str]]] = None
+
+
 class AgentInfo(BaseModel):
     agent_id: str
     config_id: str
@@ -143,6 +148,13 @@ def extract_user_message(messages: List[ChatMessage]) -> Optional[str]:
     return None
 
 
+def require_session(agent_id: str) -> str:
+    session_id = session_mgr.get_session_for_agent(agent_id)
+    if not session_id:
+        raise HTTPException(status_code=404, detail="session not found for agent")
+    return session_id
+
+
 @app.on_event("startup")
 async def start_session_cleanup():
     global cleanup_task
@@ -154,7 +166,7 @@ async def start_session_cleanup():
             try:
                 idle_sessions = session_mgr.get_idle_sessions()
                 for session_id in idle_sessions:
-                    await asyncio.to_thread(session_mgr.cleanup_session, session_id)
+                    await asyncio.to_thread(session_mgr.stop_session, session_id)
             except Exception as exc:
                 logger.warning("Session cleanup loop failed: %s", exc)
             await asyncio.sleep(max(SESSION_SWEEP_SECONDS, 10))
@@ -286,8 +298,73 @@ async def stop_session(
     if not session_mgr.authorize(session_id, x_session_token, authorization):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    await run_in_threadpool(session_mgr.cleanup_session, session_id)
+    await run_in_threadpool(session_mgr.delete_session, session_id)
+    return {"status": "deleted", "session_id": session_id}
+
+
+@app.post("/api/agents/sessions/{session_id}/stop")
+async def stop_session_container(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    try:
+        session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    await run_in_threadpool(session_mgr.stop_session, session_id)
     return {"status": "stopped", "session_id": session_id}
+
+
+@app.post("/api/agents/sessions/{session_id}/start")
+async def start_session_container(
+    session_id: str,
+    payload: Optional[ResumeRequest] = Body(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    try:
+        session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        api_key = resolve_api_key(payload.api_key if payload else None, authorization)
+        agent_record = await run_in_threadpool(
+            session_mgr.start_session,
+            session_id,
+            api_key,
+            payload.mcp_env if payload else None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return record_to_info(agent_record)
+
+
+@app.post("/api/agents/sessions/{session_id}/rotate-token")
+async def rotate_session_token(
+    session_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    try:
+        session_mgr.get_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    new_token = await run_in_threadpool(session_mgr.rotate_token, session_id)
+    return {"session_id": session_id, "session_token": new_token}
 
 
 @app.post("/api/agents/sessions/{session_id}/interrupt")
@@ -314,6 +391,62 @@ async def interrupt_session(
 
     session_mgr.touch(session_id)
     return {"status": "interrupted", "session_id": session_id}
+
+
+@app.post("/api/agents/{agent_id}/stop")
+async def stop_agent_container(
+    agent_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    session_id = require_session(agent_id)
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    await run_in_threadpool(session_mgr.stop_session, session_id)
+    return {"status": "stopped", "agent_id": agent_id}
+
+
+@app.post("/api/agents/{agent_id}/start")
+async def start_agent_container(
+    agent_id: str,
+    payload: Optional[ResumeRequest] = Body(default=None),
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    session_id = require_session(agent_id)
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        api_key = resolve_api_key(payload.api_key if payload else None, authorization)
+        agent_record = await run_in_threadpool(
+            session_mgr.start_session,
+            session_id,
+            api_key,
+            payload.mcp_env if payload else None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return record_to_info(agent_record)
+
+
+@app.post("/api/agents/{agent_id}/rotate-token")
+async def rotate_agent_token(
+    agent_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
+    session_id = require_session(agent_id)
+
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    new_token = await run_in_threadpool(session_mgr.rotate_token, session_id)
+    return {"session_id": session_id, "session_token": new_token}
 
 
 @app.post("/api/agents/chat")
@@ -379,17 +512,21 @@ async def agent_chat(
 
 
 @app.delete("/api/agents/{agent_id}")
-async def stop_agent(agent_id: str):
+async def delete_agent(
+    agent_id: str,
+    authorization: Optional[str] = Header(default=None),
+    x_session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+):
     try:
-        session_id = session_mgr.get_session_for_agent(agent_id)
-        if session_id:
-            await run_in_threadpool(session_mgr.cleanup_session, session_id)
-        else:
-            await run_in_threadpool(docker_mgr.stop_agent, agent_id, True)
+        session_id = require_session(agent_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return {"status": "stopped", "agent_id": agent_id}
+    if not session_mgr.authorize(session_id, x_session_token, authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    await run_in_threadpool(session_mgr.delete_session, session_id)
+    return {"status": "deleted", "agent_id": agent_id}
 
 
 @app.post("/api/agents/{agent_id}/query")

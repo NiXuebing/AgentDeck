@@ -197,11 +197,149 @@ class DockerManager:
             try:
                 container = self.client.containers.get(record.container_id)
                 container.reload()
-                record.status = container.status
+                record.status = self._normalize_status(container.status)
+                if record.status == "running":
+                    ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+                    bindings = ports.get("3000/tcp")
+                    if bindings and isinstance(bindings, list):
+                        record.host_port = int(bindings[0].get("HostPort"))
             except NotFound:
                 record.status = "missing"
 
         return dict(self.agents)
+
+    def restore_agents(self, records: Dict[str, AgentRecord]) -> None:
+        self.agents = dict(records)
+
+    def stop_agent(self, agent_id: str) -> AgentRecord:
+        record = self.agents.get(agent_id)
+        if not record:
+            raise KeyError(f"Unknown agent: {agent_id}")
+
+        try:
+            container = self.client.containers.get(record.container_id)
+            if container.status == "running":
+                container.stop(timeout=10)
+            container.reload()
+            record.status = self._normalize_status(container.status)
+        except NotFound:
+            record.status = "missing"
+        return record
+
+    def start_agent(
+        self,
+        agent_id: str,
+        api_key: Optional[str] = None,
+        mcp_env: Optional[Dict[str, Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
+    ) -> tuple[AgentRecord, bool]:
+        record = self.agents.get(agent_id)
+        if not record:
+            raise KeyError(f"Unknown agent: {agent_id}")
+
+        try:
+            container = self.client.containers.get(record.container_id)
+        except NotFound as exc:
+            record.status = "missing"
+            return self._recreate_agent(record, api_key, mcp_env, session_id)
+
+        if container.status != "running":
+            container.start()
+        container.reload()
+        record.status = self._normalize_status(container.status)
+
+        try:
+            ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+            bindings = ports.get("3000/tcp")
+            if bindings and isinstance(bindings, list):
+                record.host_port = int(bindings[0].get("HostPort"))
+        except Exception:
+            self.logger.debug("Failed to resolve host port for agent %s", agent_id)
+
+        return record, False
+
+    def _recreate_agent(
+        self,
+        record: AgentRecord,
+        api_key: Optional[str],
+        mcp_env: Optional[Dict[str, Dict[str, str]]],
+        session_id: Optional[str],
+    ) -> tuple[AgentRecord, bool]:
+        if not api_key:
+            raise KeyError("Agent container missing; api_key is required to recreate it")
+
+        if not record.config_path.exists():
+            raise KeyError("Agent config missing; cannot recreate container")
+
+        effective_session_id = session_id or record.session_id
+        env = self._build_env(record.agent_id, api_key, mcp_env, session_id=effective_session_id)
+
+        container = self.client.containers.run(
+            image=self.image_name,
+            name=record.container_name or f"agentdeck-{record.agent_id}",
+            detach=True,
+            environment=env,
+            volumes={
+                str(record.config_path.resolve()): {"bind": "/config/agent-config.json", "mode": "ro"},
+                record.workspace_volume: {"bind": "/workspace", "mode": "rw"},
+            },
+            ports={"3000/tcp": None},
+            labels={
+                "agentdeck": "true",
+                "agentdeck.agent_id": record.agent_id,
+                "agentdeck.config_id": record.config_id,
+            },
+        )
+
+        container.reload()
+        record.container_id = container.id
+        record.container_name = container.name
+        record.status = self._normalize_status(container.status)
+        record.session_id = effective_session_id
+
+        try:
+            ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+            bindings = ports.get("3000/tcp")
+            if bindings and isinstance(bindings, list):
+                record.host_port = int(bindings[0].get("HostPort"))
+        except Exception:
+            self.logger.debug("Failed to resolve host port for agent %s", record.agent_id)
+
+        self.agents[record.agent_id] = record
+        return record, True
+
+    def delete_agent(self, agent_id: str) -> None:
+        record = self.agents.get(agent_id)
+        if not record:
+            raise KeyError(f"Unknown agent: {agent_id}")
+
+        try:
+            container = self.client.containers.get(record.container_id)
+            container.stop(timeout=10)
+            container.remove()
+        except NotFound:
+            pass
+
+        try:
+            volume = self.client.volumes.get(record.workspace_volume)
+            volume.remove(force=True)
+        except NotFound:
+            pass
+
+        if record.config_path.exists():
+            record.config_path.unlink()
+        if record.config_path.parent.exists():
+            try:
+                record.config_path.parent.rmdir()
+            except OSError:
+                pass
+
+        self.agents.pop(agent_id, None)
+
+    def _normalize_status(self, status: str) -> str:
+        if status in {"exited", "created", "dead"}:
+            return "stopped"
+        return status
 
     def get_container(self, agent_id: str):
         record = self.agents.get(agent_id)
@@ -216,6 +354,17 @@ class DockerManager:
         record = self.agents.get(agent_id)
         if not record:
             return None
+
+        if record.status != "running":
+            try:
+                container = self.client.containers.get(record.container_id)
+                container.reload()
+                record.status = self._normalize_status(container.status)
+            except NotFound:
+                record.status = "missing"
+
+            if record.status != "running":
+                return None
 
         if record.host_port is None:
             try:
@@ -234,32 +383,3 @@ class DockerManager:
             return None
 
         return f"http://localhost:{record.host_port}"
-
-    def stop_agent(self, agent_id: str, cleanup: bool = True) -> None:
-        record = self.agents.get(agent_id)
-        if not record:
-            raise KeyError(f"Unknown agent: {agent_id}")
-
-        try:
-            container = self.client.containers.get(record.container_id)
-            container.stop(timeout=10)
-            container.remove()
-        except NotFound:
-            pass
-
-        if cleanup:
-            try:
-                volume = self.client.volumes.get(record.workspace_volume)
-                volume.remove(force=True)
-            except NotFound:
-                pass
-
-            if record.config_path.exists():
-                record.config_path.unlink()
-            if record.config_path.parent.exists():
-                try:
-                    record.config_path.parent.rmdir()
-                except OSError:
-                    pass
-
-        self.agents.pop(agent_id, None)
