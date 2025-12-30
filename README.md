@@ -49,7 +49,9 @@ backend/.venv/bin/pip install -r backend/requirements.txt
 backend/.venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Set `ANTHROPIC_API_KEY` in your shell, or pass `api_key` per request.
+Set `ANTHROPIC_API_KEY` in your shell (or `.env`), or pass `api_key` per request.
+
+To use a custom Anthropic-compatible endpoint, copy `.env.example` to `.env` and update the `ANTHROPIC_*` values. The backend will load `.env` and pass the supported keys into each container.
 
 ### 4) Frontend
 
@@ -98,4 +100,4 @@ curl -X DELETE http://localhost:8000/api/agents/{agent_id}
 - Agent config is serialized to `agent-config.json` and mounted at `/config/agent-config.json` inside the container.
 - MCP credentials should be supplied in the `mcp_env` object; the backend prevents reserved env overrides.
 - The worker image uses `backend/runtime_base/container/agent_server.py` and `backend/runtime_base/container/requirements.txt`.
-
+- Env passthrough to containers: `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_DEFAULT_*`, `ANTHROPIC_MODEL`.

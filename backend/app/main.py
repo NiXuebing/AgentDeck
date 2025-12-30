@@ -3,18 +3,23 @@ import logging
 import os
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from dotenv import load_dotenv
 
 from .docker_mgr import AgentRecord, DockerManager
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(BASE_DIR / ".env")
 
 app = FastAPI(title="AgentDeck API", version="0.1.0")
 app.add_middleware(

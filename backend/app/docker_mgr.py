@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -19,6 +20,15 @@ RESERVED_ENV_KEYS = {
     "SESSION_ID",
     "CONVERSATION_ID",
     "CONFIG_PATH",
+}
+
+PASSTHROUGH_ENV_KEYS = {
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_MODEL",
 }
 
 
@@ -84,6 +94,11 @@ class DockerManager:
             "ANTHROPIC_API_KEY": api_key,
             "CONFIG_PATH": "/config/agent-config.json",
         }
+
+        for key in PASSTHROUGH_ENV_KEYS:
+            value = os.environ.get(key)
+            if value and key not in env:
+                env[key] = value
 
         if mcp_env:
             for server_name, server_env in mcp_env.items():

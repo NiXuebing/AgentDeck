@@ -11,6 +11,8 @@ frontend/runtime_state/
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+.env
+backend/.env
 
 # OS
 .DS_Store
