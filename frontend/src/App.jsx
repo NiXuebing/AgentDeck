@@ -44,6 +44,9 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [chatByAgent, setChatByAgent] = useState({})
+  const [messageInput, setMessageInput] = useState('')
+  const [isStreaming, setIsStreaming] = useState(false)
   const [form, setForm] = useState({
     apiKey: '',
     configId: '',
@@ -60,6 +63,7 @@ function App() {
   const fitRef = useRef(null)
   const terminalHostRef = useRef(null)
   const wsRef = useRef(null)
+  const messagesEndRef = useRef(null)
 
   const mcpServersParsed = useMemo(
     () => parseJsonField(form.mcpServersJson),
@@ -90,6 +94,11 @@ function App() {
     return JSON.stringify(config, null, 2)
   }, [form, mcpServersParsed.data])
 
+  const messages = useMemo(
+    () => (selectedAgentId ? chatByAgent[selectedAgentId] || [] : []),
+    [chatByAgent, selectedAgentId]
+  )
+
   const fetchAgents = useCallback(async () => {
     setLoading(true)
     setErrorMessage('')
@@ -115,6 +124,10 @@ function App() {
     const interval = setInterval(fetchAgents, 6000)
     return () => clearInterval(interval)
   }, [fetchAgents])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, selectedAgentId])
 
   useEffect(() => {
     if (!terminalHostRef.current || termRef.current) return
@@ -182,6 +195,124 @@ function App() {
 
   const handleFieldChange = (key) => (event) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }))
+  }
+
+  const updateMessages = (agentId, updater) => {
+    setChatByAgent((prev) => {
+      const next = { ...prev }
+      const current = prev[agentId] || []
+      next[agentId] = updater(current)
+      return next
+    })
+  }
+
+  const finalizeAssistant = (agentId) => {
+    updateMessages(agentId, (current) => {
+      if (!current.length) return current
+      const next = current.slice()
+      const last = next[next.length - 1]
+      if (last.role === 'assistant') {
+        next[next.length - 1] = { ...last, streaming: false }
+      }
+      return next
+    })
+  }
+
+  const streamQuery = async (agentId, query) => {
+    const response = await fetch(`${API_BASE}/api/agents/${agentId}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, history: [] }),
+    })
+
+    if (!response.ok || !response.body) {
+      const detail = await response.text()
+      throw new Error(detail || `Failed to query agent (${response.status})`)
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() || ''
+
+      for (const part of parts) {
+        const lines = part.split('\n')
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6)
+          let event
+          try {
+            event = JSON.parse(payload)
+          } catch (error) {
+            continue
+          }
+
+          if (event.type === 'message' && event.data?.type === 'content') {
+            const chunk = event.data.content || ''
+            if (!chunk) continue
+            updateMessages(agentId, (current) => {
+              const next = current.slice()
+              const last = next[next.length - 1]
+              if (!last || last.role !== 'assistant') {
+                next.push({ role: 'assistant', content: chunk, streaming: true })
+                return next
+              }
+              next[next.length - 1] = {
+                ...last,
+                content: `${last.content}${chunk}`,
+                streaming: true,
+              }
+              return next
+            })
+          }
+
+          if (event.type === 'error') {
+            updateMessages(agentId, (current) => [
+              ...current,
+              { role: 'assistant', content: `[error] ${event.message || 'Unknown error'}` },
+            ])
+          }
+        }
+      }
+    }
+  }
+
+  const handleSendMessage = async () => {
+    if (!selectedAgentId) {
+      setErrorMessage('Select an agent before sending a message.')
+      return
+    }
+    if (!messageInput.trim()) return
+    if (isStreaming) return
+
+    const query = messageInput.trim()
+    setMessageInput('')
+    setErrorMessage('')
+    setIsStreaming(true)
+
+    updateMessages(selectedAgentId, (current) => [
+      ...current,
+      { role: 'user', content: query },
+      { role: 'assistant', content: '', streaming: true },
+    ])
+
+    try {
+      await streamQuery(selectedAgentId, query)
+    } catch (error) {
+      updateMessages(selectedAgentId, (current) => [
+        ...current,
+        { role: 'assistant', content: `[error] ${error.message}` },
+      ])
+    } finally {
+      finalizeAssistant(selectedAgentId)
+      setIsStreaming(false)
+    }
   }
 
   const handleLaunch = async () => {
@@ -474,31 +605,104 @@ function App() {
             </div>
           </section>
 
-          <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '200ms' }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="section-title">Live Logs</h2>
-                <p className="mt-1 text-xs text-neutral-500">
-                  WebSocket stream from the container runtime.
-                </p>
+          <div className="flex flex-col gap-6">
+            <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '200ms' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="section-title">Conversation</h2>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Send a prompt to the selected agent and watch the stream.
+                  </p>
+                </div>
+                <span className="badge status-running">
+                  <span className="badge-dot bg-emerald-600" /> {selectedAgentId || 'no agent'}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="glass-strong flex h-[260px] flex-col gap-3 overflow-y-auto p-4">
+                {messages.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-4 py-6 text-sm text-neutral-500">
+                    Select an agent and send a message to start chatting.
+                  </div>
+                ) : (
+                  messages.map((message, index) => {
+                    const isUser = message.role === 'user'
+                    return (
+                      <div
+                        key={`${message.role}-${index}`}
+                        className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                            isUser
+                              ? 'bg-neutral-900 text-white'
+                              : 'border border-black/5 bg-white/90 text-neutral-900'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap">{message.content || '...'}</p>
+                          {message.streaming ? (
+                            <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-neutral-400">
+                              streaming
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+              <div className="flex items-center gap-3">
+                <textarea
+                  className={`${inputClass} min-h-[48px]`}
+                  placeholder={
+                    selectedAgentId ? 'Ask the agent something...' : 'Select an agent to start chatting.'
+                  }
+                  value={messageInput}
+                  onChange={(event) => setMessageInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      handleSendMessage()
+                    }
+                  }}
+                  disabled={!selectedAgentId || isStreaming}
+                />
                 <button
-                  className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-black/20"
-                  onClick={handleClearLogs}
+                  className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
+                  onClick={handleSendMessage}
+                  disabled={!selectedAgentId || isStreaming || !messageInput.trim()}
                 >
-                  Clear
+                  {isStreaming ? 'Sending...' : 'Send'}
                 </button>
               </div>
-            </div>
-            <div className="flex-1 rounded-2xl bg-[#0b1216] p-3">
-              <div ref={terminalHostRef} className="h-[260px] w-full sm:h-[320px] lg:h-[420px]" />
-            </div>
-            <div className="flex items-center justify-between rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-neutral-500">
-              <span>Streaming: {selectedAgentId || 'none'}</span>
-              <span>{WS_BASE.replace(/^wss?:\/\//, '')}</span>
-            </div>
-          </section>
+            </section>
+
+            <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '240ms' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="section-title">Live Logs</h2>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    WebSocket stream from the container runtime.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-black/20"
+                    onClick={handleClearLogs}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 rounded-2xl bg-[#0b1216] p-3">
+                <div ref={terminalHostRef} className="h-[220px] w-full sm:h-[260px] lg:h-[300px]" />
+              </div>
+              <div className="flex items-center justify-between rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-neutral-500">
+                <span>Streaming: {selectedAgentId || 'none'}</span>
+                <span>{WS_BASE.replace(/^wss?:\/\//, '')}</span>
+              </div>
+            </section>
+          </div>
         </main>
       </div>
     </div>

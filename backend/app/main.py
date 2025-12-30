@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -6,9 +7,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 
@@ -38,6 +41,11 @@ class SpawnAgentRequest(BaseModel):
     api_key: Optional[str] = None
     config: Dict[str, Any] = Field(default_factory=dict)
     mcp_env: Optional[Dict[str, Dict[str, str]]] = None
+
+
+class QueryAgentRequest(BaseModel):
+    query: str
+    history: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentInfo(BaseModel):
@@ -109,6 +117,44 @@ async def stop_agent(agent_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return {"status": "stopped", "agent_id": agent_id}
+
+
+@app.post("/api/agents/{agent_id}/query")
+async def query_agent(agent_id: str, payload: QueryAgentRequest):
+    endpoint = await run_in_threadpool(docker_mgr.get_agent_endpoint, agent_id)
+    if not endpoint:
+        raise HTTPException(status_code=404, detail="agent not found or no endpoint")
+
+    url = f"{endpoint}/query"
+    request_body = payload.model_dump()
+
+    async def event_stream():
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream(
+                "POST",
+                url,
+                json=request_body,
+                headers={"Accept": "text/event-stream"},
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    message = body.decode(errors="ignore").strip()
+                    error_payload = {"type": "error", "message": message or "agent query failed"}
+                    yield f"data: {json.dumps(error_payload)}\n\n".encode()
+                    return
+
+                async for chunk in resp.aiter_raw():
+                    yield chunk
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.websocket("/ws/agents/{agent_id}/logs")

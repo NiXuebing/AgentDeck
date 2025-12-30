@@ -199,6 +199,29 @@ class DockerManager:
         except NotFound:
             return None
 
+    def get_agent_endpoint(self, agent_id: str) -> Optional[str]:
+        record = self.agents.get(agent_id)
+        if not record:
+            return None
+
+        if record.host_port is None:
+            try:
+                container = self.client.containers.get(record.container_id)
+                container.reload()
+                ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
+                bindings = ports.get("3000/tcp")
+                if bindings and isinstance(bindings, list):
+                    record.host_port = int(bindings[0].get("HostPort"))
+            except NotFound:
+                return None
+            except Exception:
+                self.logger.debug("Failed to refresh host port for agent %s", agent_id)
+
+        if not record.host_port:
+            return None
+
+        return f"http://localhost:{record.host_port}"
+
     def stop_agent(self, agent_id: str, cleanup: bool = True) -> None:
         record = self.agents.get(agent_id)
         if not record:
