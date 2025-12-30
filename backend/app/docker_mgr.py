@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,6 +54,7 @@ class DockerManager:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.client = docker.from_env()
         self.logger = logging.getLogger(__name__)
+        self._lock = threading.Lock()
         self.agents: Dict[str, AgentRecord] = {}
 
     def _normalize_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -186,33 +188,53 @@ class DockerManager:
             host_port=host_port,
         )
 
-        self.agents[agent_id] = record
+        with self._lock:
+            self.agents[agent_id] = record
         return record
 
     def list_agents(self, refresh: bool = True) -> Dict[str, AgentRecord]:
         if not refresh:
-            return dict(self.agents)
+            with self._lock:
+                return dict(self.agents)
 
-        for agent_id, record in list(self.agents.items()):
+        with self._lock:
+            agents_snapshot = list(self.agents.items())
+
+        updates: Dict[str, Dict[str, Optional[Any]]] = {}
+        for agent_id, record in agents_snapshot:
             try:
                 container = self.client.containers.get(record.container_id)
                 container.reload()
-                record.status = self._normalize_status(container.status)
-                if record.status == "running":
+                status = self._normalize_status(container.status)
+                host_port = record.host_port
+                if status == "running":
                     ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
                     bindings = ports.get("3000/tcp")
                     if bindings and isinstance(bindings, list):
-                        record.host_port = int(bindings[0].get("HostPort"))
+                        host_port = int(bindings[0].get("HostPort"))
+                updates[agent_id] = {"status": status, "host_port": host_port}
             except NotFound:
-                record.status = "missing"
+                updates[agent_id] = {"status": "missing", "host_port": record.host_port}
 
-        return dict(self.agents)
+        if updates:
+            with self._lock:
+                for agent_id, values in updates.items():
+                    record = self.agents.get(agent_id)
+                    if not record:
+                        continue
+                    record.status = values.get("status") or record.status
+                    record.host_port = values.get("host_port")
+
+        with self._lock:
+            return dict(self.agents)
 
     def restore_agents(self, records: Dict[str, AgentRecord]) -> None:
-        self.agents = dict(records)
+        with self._lock:
+            self.agents = dict(records)
 
     def stop_agent(self, agent_id: str) -> AgentRecord:
-        record = self.agents.get(agent_id)
+        with self._lock:
+            record = self.agents.get(agent_id)
         if not record:
             raise KeyError(f"Unknown agent: {agent_id}")
 
@@ -221,9 +243,12 @@ class DockerManager:
             if container.status == "running":
                 container.stop(timeout=10)
             container.reload()
-            record.status = self._normalize_status(container.status)
+            status = self._normalize_status(container.status)
         except NotFound:
-            record.status = "missing"
+            status = "missing"
+        with self._lock:
+            if agent_id in self.agents:
+                record.status = status
         return record
 
     def start_agent(
@@ -233,28 +258,39 @@ class DockerManager:
         mcp_env: Optional[Dict[str, Dict[str, str]]] = None,
         session_id: Optional[str] = None,
     ) -> tuple[AgentRecord, bool]:
-        record = self.agents.get(agent_id)
+        with self._lock:
+            record = self.agents.get(agent_id)
         if not record:
             raise KeyError(f"Unknown agent: {agent_id}")
 
         try:
             container = self.client.containers.get(record.container_id)
         except NotFound as exc:
-            record.status = "missing"
+            with self._lock:
+                if agent_id in self.agents:
+                    record.status = "missing"
             return self._recreate_agent(record, api_key, mcp_env, session_id)
 
         if container.status != "running":
             container.start()
         container.reload()
-        record.status = self._normalize_status(container.status)
+        status = self._normalize_status(container.status)
 
         try:
             ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
             bindings = ports.get("3000/tcp")
             if bindings and isinstance(bindings, list):
-                record.host_port = int(bindings[0].get("HostPort"))
+                host_port = int(bindings[0].get("HostPort"))
+            else:
+                host_port = record.host_port
         except Exception:
             self.logger.debug("Failed to resolve host port for agent %s", agent_id)
+            host_port = record.host_port
+
+        with self._lock:
+            if agent_id in self.agents:
+                record.status = status
+                record.host_port = host_port
 
         return record, False
 
@@ -292,24 +328,31 @@ class DockerManager:
         )
 
         container.reload()
-        record.container_id = container.id
-        record.container_name = container.name
-        record.status = self._normalize_status(container.status)
-        record.session_id = effective_session_id
+        status = self._normalize_status(container.status)
 
         try:
             ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
             bindings = ports.get("3000/tcp")
             if bindings and isinstance(bindings, list):
-                record.host_port = int(bindings[0].get("HostPort"))
+                host_port = int(bindings[0].get("HostPort"))
+            else:
+                host_port = record.host_port
         except Exception:
             self.logger.debug("Failed to resolve host port for agent %s", record.agent_id)
+            host_port = record.host_port
 
-        self.agents[record.agent_id] = record
+        with self._lock:
+            record.container_id = container.id
+            record.container_name = container.name
+            record.status = status
+            record.session_id = effective_session_id
+            record.host_port = host_port
+            self.agents[record.agent_id] = record
         return record, True
 
     def delete_agent(self, agent_id: str) -> None:
-        record = self.agents.get(agent_id)
+        with self._lock:
+            record = self.agents.get(agent_id)
         if not record:
             raise KeyError(f"Unknown agent: {agent_id}")
 
@@ -334,7 +377,8 @@ class DockerManager:
             except OSError:
                 pass
 
-        self.agents.pop(agent_id, None)
+        with self._lock:
+            self.agents.pop(agent_id, None)
 
     def _normalize_status(self, status: str) -> str:
         if status in {"exited", "created", "dead"}:
@@ -342,7 +386,8 @@ class DockerManager:
         return status
 
     def get_container(self, agent_id: str):
-        record = self.agents.get(agent_id)
+        with self._lock:
+            record = self.agents.get(agent_id)
         if not record:
             return None
         try:
@@ -351,7 +396,8 @@ class DockerManager:
             return None
 
     def get_agent_endpoint(self, agent_id: str) -> Optional[str]:
-        record = self.agents.get(agent_id)
+        with self._lock:
+            record = self.agents.get(agent_id)
         if not record:
             return None
 
@@ -359,9 +405,13 @@ class DockerManager:
             try:
                 container = self.client.containers.get(record.container_id)
                 container.reload()
-                record.status = self._normalize_status(container.status)
+                status = self._normalize_status(container.status)
             except NotFound:
-                record.status = "missing"
+                status = "missing"
+
+            with self._lock:
+                if agent_id in self.agents:
+                    record.status = status
 
             if record.status != "running":
                 return None
@@ -373,11 +423,18 @@ class DockerManager:
                 ports = container.attrs.get("NetworkSettings", {}).get("Ports", {})
                 bindings = ports.get("3000/tcp")
                 if bindings and isinstance(bindings, list):
-                    record.host_port = int(bindings[0].get("HostPort"))
+                    host_port = int(bindings[0].get("HostPort"))
+                else:
+                    host_port = record.host_port
             except NotFound:
                 return None
             except Exception:
                 self.logger.debug("Failed to refresh host port for agent %s", agent_id)
+                host_port = record.host_port
+
+            with self._lock:
+                if agent_id in self.agents:
+                    record.host_port = host_port
 
         if not record.host_port:
             return None
