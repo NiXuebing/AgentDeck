@@ -2,6 +2,14 @@
 
 AgentDeck is a lightweight control plane that wraps the AgCluster container runtime with a FastAPI backend and a React dashboard. It spins up Claude agent containers using the upstream `agcluster-container` runtime and streams logs back to the UI.
 
+## Features
+
+- **Agent Customization**: Configure sub-agents, skills, and slash commands via `.claude/` directory
+- **Multi-Session Management**: Launch, stop, and monitor multiple agent instances
+- **Live Terminal Logs**: WebSocket-based log streaming from agent containers
+- **Interactive Chat**: Real-time streaming chat with running agents
+- **MCP Server Support**: Configure and inject MCP server credentials
+
 ## Stack
 
 - Backend: FastAPI + Docker SDK
@@ -14,10 +22,22 @@ AgentDeck is a lightweight control plane that wraps the AgCluster container runt
 /agent-deck
 ├── /agcluster-source          # upstream repo (cloned locally)
 ├── /backend
-│   ├── /app                   # FastAPI API + Docker manager
+│   ├── /app
+│   │   ├── claude_generator.py  # .claude/ directory generator
+│   │   ├── docker_mgr.py         # Docker container manager
+│   │   └── main.py               # FastAPI application
 │   ├── /runtime_base          # worker image sources (Dockerfile + agent server)
 │   └── requirements.txt
-├── /frontend                  # Vite React UI
+├── /frontend
+│   └── /src
+│       ├── /components          # React components
+│       │   ├── /tabs            # Tab components (Profile, Toolbox, Skills, Commands)
+│       │   ├── SubAgentCard.jsx
+│       │   ├── SubAgentEditor.jsx
+│       │   └── PreviewPanel.jsx
+│       ├── /constants
+│       │   └── tools.js         # Tool groups, models, templates
+│       └── App.jsx              # Main application
 └── README.md
 ```
 
@@ -163,9 +183,129 @@ curl -X POST http://localhost:8000/api/agents/sessions/{session_id}/rotate-token
   -H "X-Session-Token: <session_token>"
 ```
 
+## Agent Customization
+
+AgentDeck supports advanced agent customization through the `.claude/` directory structure. This includes sub-agents, skills, and slash commands.
+
+### Config Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `agents` | object | Sub-agent definitions (delegated via Task tool) |
+| `skills` | object | Auto-triggered skills with descriptions |
+| `commands` | object | Manual slash commands |
+| `allowed_tools` | array | Available tools for the agent |
+| `mcp_servers` | object | MCP server configurations |
+
+### Example: Agent with Sub-Agents
+
+```bash
+curl -X POST http://localhost:8000/api/agents/launch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config": {
+      "id": "dev-team",
+      "name": "Development Team",
+      "allowed_tools": ["Read", "Write", "Bash", "Task", "Grep", "Glob"],
+      "agents": {
+        "frontend": {
+          "icon": "🎨",
+          "description": "React, Next.js, TypeScript, CSS",
+          "model": "sonnet",
+          "allowed_tools": ["Read", "Write", "Edit", "Grep", "Glob"],
+          "prompt": "You are a senior frontend engineer specializing in React 18+..."
+        },
+        "backend": {
+          "icon": "⚙️",
+          "description": "Python, FastAPI, PostgreSQL",
+          "model": "sonnet",
+          "allowed_tools": ["Read", "Write", "Bash", "Grep"],
+          "prompt": "You are a senior backend engineer..."
+        }
+      }
+    }
+  }'
+```
+
+### Example: Agent with Skills
+
+```bash
+curl -X POST http://localhost:8000/api/agents/launch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config": {
+      "id": "code-reviewer",
+      "name": "Code Reviewer",
+      "allowed_tools": ["Read", "Grep", "Skill"],
+      "skills": {
+        "security": {
+          "description": "Review code for security vulnerabilities",
+          "content": "# Security Review Guidelines\\n\\nCheck for:..."
+        },
+        "performance": {
+          "description": "Review code for performance issues",
+          "content": "# Performance Review\\n\\nLook for:..."
+        }
+      }
+    }
+  }'
+```
+
+### Example: Agent with Slash Commands
+
+```bash
+curl -X POST http://localhost:8000/api/agents/launch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config": {
+      "id": "cli-helper",
+      "name": "CLI Helper",
+      "allowed_tools": ["Read", "Bash", "Grep"],
+      "commands": {
+        "test": {
+          "description": "Run tests for the project",
+          "argumentHint": "[test-pattern]",
+          "prompt": "Run tests matching $1. Report results."
+        },
+        "lint": {
+          "description": "Lint and fix code issues",
+          "prompt": "Run linter and auto-fix all issues."
+        }
+      }
+    }
+  }'
+```
+
+### Generated Directory Structure
+
+When you launch an agent with customizations, AgentDeck generates a `.claude/` directory:
+
+```
+.claude/
+├── agent-config.json           # Main configuration
+├── agents/
+│   ├── frontend.md             # Sub-agent definitions
+│   └── backend.md
+├── skills/
+│   ├── security/
+│   │   └── SKILL.md
+│   └── performance/
+│       └── SKILL.md
+└── commands/
+    ├── test.md
+    └── lint.md
+```
+
+This directory is mounted into the container at `/workspace/.claude` and automatically loaded by the Claude SDK.
+
 ## Notes
 
 - Agent config is serialized to `agent-config.json` and mounted at `/config/agent-config.json` inside the container.
+- When `agents`, `skills`, or `commands` are defined, a `.claude/` directory is automatically generated and mounted at `/workspace/.claude`.
+- The SDK is initialized with `setting_sources: ["project"]` to load the `.claude/` directory configuration.
+- Sub-agents are invoked via the `Task` tool based on their descriptions (requires `Task` in `allowed_tools`).
+- Skills are auto-triggered by the SDK based on their descriptions (requires `Skill` in `allowed_tools`).
+- Slash commands are invoked manually by typing `/command-name` in chat.
 - MCP credentials should be supplied in the `mcp_env` object; the backend prevents reserved env overrides.
 - The worker image uses `backend/runtime_base/container/agent_server.py` and `backend/runtime_base/container/requirements.txt`.
 - Env passthrough to containers: `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_DEFAULT_*`, `ANTHROPIC_MODEL`.
