@@ -153,6 +153,7 @@ class AgentServer:
             # Build options from config
             options_dict = {
                 "cwd": "/workspace",
+                "setting_sources": ["project"],  # Load .claude/ directory
                 "allowed_tools": self.config.get("allowed_tools", ["Bash", "Read", "Write"]),
                 "permission_mode": self.config.get("permission_mode", "acceptEdits"),
             }
