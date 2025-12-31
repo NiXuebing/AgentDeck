@@ -21,8 +21,6 @@ const SESSION_STORE_KEY = 'agentdeck.sessions'
 const inputClass =
   'w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-2 text-sm text-neutral-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
 
-const labelClass = 'text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500'
-
 const parseList = (value) =>
   value
     .split(',')
@@ -35,8 +33,8 @@ const parseJsonField = (value) => {
   }
   try {
     return { data: JSON.parse(value), error: null }
-  } catch (error) {
-    return { data: null, error: error.message }
+  } catch (e) {
+    return { data: null, error: e.message }
   }
 }
 
@@ -51,7 +49,7 @@ const readSessionStore = () => {
   if (typeof window === 'undefined') return {}
   try {
     return JSON.parse(window.localStorage.getItem(SESSION_STORE_KEY) || '{}')
-  } catch (error) {
+  } catch {
     return {}
   }
 }
@@ -85,7 +83,7 @@ function App() {
     bashPatterns: [],
   })
   const [mcpServersJson, setMcpServersJson] = useState('')
-  const [mcpEnvJson, setMcpEnvJson] = useState('')
+  const [mcpEnvJson] = useState('')
   const [subAgents, setSubAgents] = useState({})
   const [skills, setSkills] = useState({})
   const [commands, setCommands] = useState({})
@@ -263,10 +261,6 @@ function App() {
     }
   }, [selectedAgentId])
 
-  const handleFieldChange = (key) => (event) => {
-    setForm((prev) => ({ ...prev, [key]: event.target.value }))
-  }
-
   const handleAddSubAgent = () => {
     setEditingSubAgent(null)
     setIsAddingSubAgent(true)
@@ -350,7 +344,7 @@ function App() {
           let event
           try {
             event = JSON.parse(payload)
-          } catch (error) {
+          } catch {
             continue
           }
 
