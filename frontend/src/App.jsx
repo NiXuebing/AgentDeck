@@ -2,12 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 
+import { ProfileTab } from './components/tabs/ProfileTab'
+import { ToolboxTab } from './components/tabs/ToolboxTab'
+import { SkillsTab } from './components/tabs/SkillsTab'
+import { CommandsTab } from './components/tabs/CommandsTab'
+import { SubAgentCard } from './components/SubAgentCard'
+import { SubAgentEditor } from './components/SubAgentEditor'
+import { PreviewPanel } from './components/PreviewPanel'
+import { DEFAULT_TOOLS } from './constants/tools'
+
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const WS_BASE = API_BASE
   ? API_BASE.replace(/^http/, 'ws')
   : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
 
-const DEFAULT_TOOLS = 'Bash,Read,Write,Edit,Grep'
 const SESSION_STORE_KEY = 'agentdeck.sessions'
 
 const inputClass =
@@ -66,13 +74,24 @@ function App() {
   const [form, setForm] = useState({
     configId: '',
     name: '',
+    description: '',
     systemPrompt: '',
+    useCustomPrompt: false,
     allowedTools: DEFAULT_TOOLS,
     permissionMode: 'bypassPermissions',
     maxTurns: '40',
-    mcpServersJson: '',
-    mcpEnvJson: '',
+    model: '',
+    bashMode: 'all',
+    bashPatterns: [],
   })
+  const [mcpServersJson, setMcpServersJson] = useState('')
+  const [mcpEnvJson, setMcpEnvJson] = useState('')
+  const [subAgents, setSubAgents] = useState({})
+  const [skills, setSkills] = useState({})
+  const [commands, setCommands] = useState({})
+  const [activeConfigTab, setActiveConfigTab] = useState('profile')
+  const [editingSubAgent, setEditingSubAgent] = useState(null)
+  const [isAddingSubAgent, setIsAddingSubAgent] = useState(false)
 
   const termRef = useRef(null)
   const fitRef = useRef(null)
@@ -81,23 +100,37 @@ function App() {
   const messagesEndRef = useRef(null)
 
   const mcpServersParsed = useMemo(
-    () => parseJsonField(form.mcpServersJson),
-    [form.mcpServersJson]
+    () => parseJsonField(mcpServersJson),
+    [mcpServersJson]
   )
-  const mcpEnvParsed = useMemo(() => parseJsonField(form.mcpEnvJson), [form.mcpEnvJson])
+  const mcpEnvParsed = useMemo(() => parseJsonField(mcpEnvJson), [mcpEnvJson])
 
   const configPreview = useMemo(() => {
     const config = {
       id: form.configId.trim() || undefined,
       name: form.name.trim() || undefined,
-      system_prompt: form.systemPrompt.trim() || undefined,
+      description: form.description?.trim() || undefined,
+      system_prompt: form.useCustomPrompt ? (form.systemPrompt.trim() || undefined) : undefined,
       permission_mode: form.permissionMode || undefined,
       max_turns: form.maxTurns ? Number(form.maxTurns) : undefined,
-      allowed_tools: parseList(form.allowedTools || ''),
+      model: form.model || undefined,
+      allowed_tools: Array.isArray(form.allowedTools) ? form.allowedTools : parseList(form.allowedTools || ''),
     }
 
     if (mcpServersParsed.data) {
       config.mcp_servers = mcpServersParsed.data
+    }
+
+    if (Object.keys(subAgents).length > 0) {
+      config.agents = subAgents
+    }
+
+    if (Object.keys(skills).length > 0) {
+      config.skills = skills
+    }
+
+    if (Object.keys(commands).length > 0) {
+      config.commands = commands
     }
 
     Object.keys(config).forEach((key) => {
@@ -107,7 +140,7 @@ function App() {
     })
 
     return JSON.stringify(config, null, 2)
-  }, [form, mcpServersParsed.data])
+  }, [form, mcpServersParsed.data, subAgents, skills, commands])
 
   const messages = useMemo(
     () => (selectedAgentId ? chatByAgent[selectedAgentId] || [] : []),
@@ -232,6 +265,32 @@ function App() {
 
   const handleFieldChange = (key) => (event) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }))
+  }
+
+  const handleAddSubAgent = () => {
+    setEditingSubAgent(null)
+    setIsAddingSubAgent(true)
+  }
+
+  const handleEditSubAgent = (name, agent) => {
+    setEditingSubAgent({ name, ...agent })
+    setIsAddingSubAgent(false)
+  }
+
+  const handleSaveSubAgent = (agent) => {
+    const { name, ...rest } = agent
+    setSubAgents((prev) => ({ ...prev, [name]: rest }))
+    setEditingSubAgent(null)
+    setIsAddingSubAgent(false)
+  }
+
+  const handleDeleteSubAgent = (name) => {
+    if (!window.confirm(`Delete sub-agent "${name}"?`)) return
+    setSubAgents((prev) => {
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
   }
 
   const updateMessages = (agentId, updater) => {
@@ -627,7 +686,7 @@ function App() {
               <div>
                 <h2 className="section-title">Agent Configuration</h2>
                 <p className="mt-2 text-sm text-neutral-500">
-                  Shape allowed tools, prompts, MCP servers, and permissions for each run.
+                  Configure tools, sub-agents, skills, and slash commands for your agent.
                 </p>
               </div>
               <button
@@ -639,104 +698,111 @@ function App() {
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <label className={labelClass}>Config ID</label>
-                <input
-                  className={inputClass}
-                  placeholder="code-assistant"
-                  value={form.configId}
-                  onChange={handleFieldChange('configId')}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className={labelClass}>Display Name</label>
-                <input
-                  className={inputClass}
-                  placeholder="Agent Deck Builder"
-                  value={form.name}
-                  onChange={handleFieldChange('name')}
-                />
-              </div>
-              <div className="flex flex-col gap-2 md:col-span-2">
-                <label className={labelClass}>System Prompt</label>
-                <textarea
-                  className={`${inputClass} min-h-[88px]`}
-                  placeholder="Describe the mission for this agent..."
-                  value={form.systemPrompt}
-                  onChange={handleFieldChange('systemPrompt')}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className={labelClass}>Allowed Tools</label>
-                <input
-                  className={inputClass}
-                  value={form.allowedTools}
-                  onChange={handleFieldChange('allowedTools')}
-                />
-                <p className="text-xs text-neutral-500">Comma separated, MCP tools auto-appended.</p>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <label className={labelClass}>Permission Mode</label>
-                  <select
-                    className={inputClass}
-                    value={form.permissionMode}
-                    onChange={handleFieldChange('permissionMode')}
-                  >
-                    <option value="default">default</option>
-                    <option value="acceptEdits">acceptEdits</option>
-                    <option value="plan">plan</option>
-                    <option value="bypassPermissions">bypassPermissions</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className={labelClass}>Max Turns</label>
-                  <input
-                    className={inputClass}
-                    type="number"
-                    min="1"
-                    value={form.maxTurns}
-                    onChange={handleFieldChange('maxTurns')}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 md:col-span-2">
-                <label className={labelClass}>MCP Servers (JSON)</label>
-                <textarea
-                  className={`${inputClass} mono min-h-[92px] text-xs`}
-                  placeholder='{"github": {"type": "http", "url": "http://localhost:9999"}}'
-                  value={form.mcpServersJson}
-                  onChange={handleFieldChange('mcpServersJson')}
-                />
-                {mcpServersParsed.error ? (
-                  <p className="text-xs text-red-600">{mcpServersParsed.error}</p>
-                ) : null}
-              </div>
-              <div className="flex flex-col gap-2 md:col-span-2">
-                <label className={labelClass}>MCP Runtime Env (JSON)</label>
-                <textarea
-                  className={`${inputClass} mono min-h-[92px] text-xs`}
-                  placeholder='{"github": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..."}}'
-                  value={form.mcpEnvJson}
-                  onChange={handleFieldChange('mcpEnvJson')}
-                />
-                {mcpEnvParsed.error ? (
-                  <p className="text-xs text-red-600">{mcpEnvParsed.error}</p>
-                ) : null}
-              </div>
+            {/* Config Tabs */}
+            <div className="flex border-b border-black/10">
+              {[
+                { id: 'profile', label: 'Profile' },
+                { id: 'toolbox', label: 'Toolbox' },
+                { id: 'agents', label: `Sub-Agents (${Object.keys(subAgents).length})` },
+                { id: 'skills', label: `Skills (${Object.keys(skills).length})` },
+                { id: 'commands', label: `Commands (${Object.keys(commands).length})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveConfigTab(tab.id)}
+                  className={`px-4 py-2.5 text-sm font-medium transition ${
+                    activeConfigTab === tab.id
+                      ? 'border-b-2 border-emerald-500 text-emerald-700'
+                      : 'text-neutral-500 hover:text-neutral-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
-            <div className="glass-strong grid-dots rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="section-title">Config Preview</h3>
-                <span className="text-xs text-neutral-500">agent-config.json</span>
-              </div>
-              <pre className="mono mt-3 max-h-64 overflow-auto rounded-xl bg-neutral-900/90 p-4 text-xs text-emerald-100">
-                {configPreview}
-              </pre>
+            {/* Tab Content */}
+            <div className="min-h-[400px]">
+              {activeConfigTab === 'profile' && (
+                <ProfileTab form={form} onChange={setForm} />
+              )}
+
+              {activeConfigTab === 'toolbox' && (
+                <ToolboxTab
+                  form={form}
+                  onChange={setForm}
+                  mcpServers={mcpServersJson}
+                  onMcpServersChange={setMcpServersJson}
+                />
+              )}
+
+              {activeConfigTab === 'agents' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-neutral-500">
+                      Sub-agents are invoked via the Task tool based on their descriptions.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleAddSubAgent}
+                      className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                    >
+                      + Add Sub-Agent
+                    </button>
+                  </div>
+                  {Object.keys(subAgents).length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-black/10 bg-white/50 p-8 text-center">
+                      <p className="text-sm text-neutral-500">No sub-agents defined yet.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {Object.entries(subAgents).map(([name, agent]) => (
+                        <SubAgentCard
+                          key={name}
+                          name={name}
+                          agent={agent}
+                          onEdit={handleEditSubAgent}
+                          onDelete={handleDeleteSubAgent}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeConfigTab === 'skills' && (
+                <SkillsTab skills={skills} onChange={setSkills} />
+              )}
+
+              {activeConfigTab === 'commands' && (
+                <CommandsTab commands={commands} onChange={setCommands} />
+              )}
+            </div>
+
+            {/* Preview Panel */}
+            <div className="h-[300px]">
+              <PreviewPanel
+                config={JSON.parse(configPreview)}
+                agents={subAgents}
+                skills={skills}
+                commands={commands}
+              />
             </div>
           </section>
+
+          {/* Sub-Agent Editor Modal */}
+          {(editingSubAgent || isAddingSubAgent) && (
+            <SubAgentEditor
+              agent={editingSubAgent}
+              isNew={isAddingSubAgent}
+              onSave={handleSaveSubAgent}
+              onCancel={() => {
+                setEditingSubAgent(null)
+                setIsAddingSubAgent(false)
+              }}
+            />
+          )}
 
           <div className="flex flex-col gap-6">
             <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '200ms' }}>
