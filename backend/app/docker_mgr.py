@@ -13,6 +13,8 @@ from typing import Any, Dict, Optional
 import docker
 from docker.errors import NotFound
 
+from app.claude_generator import generate_claude_directory
+
 
 RESERVED_ENV_KEYS = {
     "ANTHROPIC_API_KEY",
@@ -144,19 +146,43 @@ class DockerManager:
 
         normalized_config = self._normalize_config(raw_config)
         config_path = self._write_config(agent_id, normalized_config)
+
+        # Generate .claude/ directory if agents, skills, or commands are configured
+        agents_config = normalized_config.get("agents")
+        skills_config = normalized_config.get("skills")
+        commands_config = normalized_config.get("commands")
+        if agents_config or skills_config or commands_config:
+            agent_dir = self.state_dir / agent_id
+            generate_claude_directory(
+                base_path=agent_dir,
+                config=normalized_config,
+                agents=agents_config,
+                skills=skills_config,
+                commands=commands_config,
+            )
+
         workspace_volume = f"agentdeck-workspace-{agent_id}"
 
         env = self._build_env(agent_id, api_key, mcp_env, session_id=session_id)
+
+        # Build volumes mapping
+        agent_dir = self.state_dir / agent_id
+        volumes = {
+            str(config_path.resolve()): {"bind": "/config/agent-config.json", "mode": "ro"},
+            workspace_volume: {"bind": "/workspace", "mode": "rw"},
+        }
+
+        # Mount .claude directory if it exists
+        claude_dir = agent_dir / ".claude"
+        if claude_dir.exists():
+            volumes[str(claude_dir.resolve())] = {"bind": "/workspace/.claude", "mode": "ro"}
 
         container = self.client.containers.run(
             image=self.image_name,
             name=f"agentdeck-{agent_id}",
             detach=True,
             environment=env,
-            volumes={
-                str(config_path.resolve()): {"bind": "/config/agent-config.json", "mode": "ro"},
-                workspace_volume: {"bind": "/workspace", "mode": "rw"},
-            },
+            volumes=volumes,
             ports={"3000/tcp": None},
             labels={
                 "agentdeck": "true",
@@ -310,15 +336,23 @@ class DockerManager:
         effective_session_id = session_id or record.session_id
         env = self._build_env(record.agent_id, api_key, mcp_env, session_id=effective_session_id)
 
+        # Build volumes mapping
+        volumes = {
+            str(record.config_path.resolve()): {"bind": "/config/agent-config.json", "mode": "ro"},
+            record.workspace_volume: {"bind": "/workspace", "mode": "rw"},
+        }
+
+        # Mount .claude directory if it exists
+        claude_dir = record.config_path.parent / ".claude"
+        if claude_dir.exists():
+            volumes[str(claude_dir.resolve())] = {"bind": "/workspace/.claude", "mode": "ro"}
+
         container = self.client.containers.run(
             image=self.image_name,
             name=record.container_name or f"agentdeck-{record.agent_id}",
             detach=True,
             environment=env,
-            volumes={
-                str(record.config_path.resolve()): {"bind": "/config/agent-config.json", "mode": "ro"},
-                record.workspace_volume: {"bind": "/workspace", "mode": "rw"},
-            },
+            volumes=volumes,
             ports={"3000/tcp": None},
             labels={
                 "agentdeck": "true",
