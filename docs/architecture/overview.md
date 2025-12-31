@@ -91,18 +91,24 @@ graph TD
 ## 目录结构
 
 ```
-/agent-deck
-├── backend/
-│   ├── app/                # 主要 API 逻辑
-│   │   ├── main.py         # 路由和入口点
-│   │   ├── docker_mgr.py   # Docker 编排
-│   │   └── session_mgr.py  # 认证和会话
-│   ├── runtime_base/       # 智能体工作节点镜像资源
-│   │   ├── Dockerfile
-│   │   └── container/      # 智能体服务器代码
-│   └── runtime_state/      # 持久化的注册表和配置 (gitignored)
-├── frontend/               # React 应用程序
-└── agcluster-source/       # 上游参考 (如果需要)
+AgentDeck/
+├── backend/               # FastAPI 后端
+│   ├── app/               # 主要 API 逻辑
+│   │   ├── main.py        # 路由和入口点
+│   │   ├── docker_mgr.py  # Docker 编排
+│   │   └── session_mgr.py # 认证和会话
+│   └── runtime_state/     # 持久化的注册表和配置 (gitignored)
+├── frontend/              # React 应用程序
+├── runtime/               # 智能体工作节点镜像资源
+│   ├── Dockerfile
+│   └── container/         # 智能体服务器代码
+├── docs/                  # 文档
+│   ├── architecture/      # 架构文档
+│   ├── plans/             # 设计和实现计划
+│   ├── references/        # 参考资料
+│   └── guides/            # 用户/开发指南
+├── scripts/               # 工具脚本
+└── config/                # 静态配置文件
 ```
 
 ## 安全与配置

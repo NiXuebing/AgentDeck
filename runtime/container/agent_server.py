@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import is_dataclass
 from pathlib import Path
 from typing import Optional, Dict, Any, AsyncIterator
 from datetime import datetime, timezone
@@ -179,8 +180,49 @@ class AgentServer:
             # Add sub-agents if configured (multi-agent orchestration)
             agents = self.config.get("agents", {})
             if agents:
-                options_dict["agents"] = agents
-                logger.info(f"Configured {len(agents)} sub-agents: {list(agents.keys())}")
+                if not isinstance(agents, dict):
+                    logger.warning(
+                        "Skipping sub-agent configuration: expected object, got %s",
+                        type(agents).__name__,
+                    )
+                else:
+                    try:
+                        from claude_agent_sdk import AgentDefinition
+                    except ImportError:
+                        logger.warning("AgentDefinition not available; skipping sub-agent configuration")
+                    else:
+                        normalized_agents = {}
+                        for name, agent_def in agents.items():
+                            if is_dataclass(agent_def):
+                                normalized_agents[name] = agent_def
+                                continue
+                            if not isinstance(agent_def, dict):
+                                logger.warning(
+                                    "Skipping sub-agent %s: expected object, got %s",
+                                    name,
+                                    type(agent_def).__name__,
+                                )
+                                continue
+                            tools = agent_def.get("tools")
+                            if tools is None:
+                                tools = agent_def.get("allowed_tools")
+                            agent_kwargs = {
+                                "description": agent_def.get("description", ""),
+                                "prompt": agent_def.get("prompt", ""),
+                            }
+                            if tools is not None:
+                                agent_kwargs["tools"] = tools
+                            model = agent_def.get("model")
+                            if model is not None:
+                                agent_kwargs["model"] = model
+                            normalized_agents[name] = AgentDefinition(**agent_kwargs)
+                        if normalized_agents:
+                            options_dict["agents"] = normalized_agents
+                            logger.info(
+                                "Configured %s sub-agents: %s",
+                                len(normalized_agents),
+                                list(normalized_agents.keys()),
+                            )
 
             # Add hook support if configured
             hooks = self.config.get("hooks", {})
