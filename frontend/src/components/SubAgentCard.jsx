@@ -19,8 +19,8 @@ export function SubAgentCard({ name, agent, onEdit, onDelete }) {
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-neutral-400">
         <div className="flex gap-3">
-          <span>Model: {agent.model || 'inherit'}</span>
-          <span>Tools: {toolCount || 'inherit'}</span>
+          <span>模型：{agent.model || '继承'}</span>
+          <span>工具：{toolCount || '继承'}</span>
         </div>
         <div className="flex gap-2">
           <button
@@ -28,14 +28,14 @@ export function SubAgentCard({ name, agent, onEdit, onDelete }) {
             onClick={() => onEdit(name, agent)}
             className="rounded-lg border border-black/10 px-2.5 py-1 font-medium text-neutral-600 hover:bg-neutral-50"
           >
-            Edit
+            编辑
           </button>
           <button
             type="button"
             onClick={() => onDelete(name)}
             className="rounded-lg border border-red-200 px-2.5 py-1 font-medium text-red-500 hover:bg-red-50"
           >
-            Delete
+            删除
           </button>
         </div>
       </div>

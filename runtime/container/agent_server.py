@@ -682,4 +682,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=3000,  # Changed from 8765 (WebSocket) to 3000 (HTTP)
         log_level="info",
+        access_log=False,
     )

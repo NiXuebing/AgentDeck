@@ -35,7 +35,7 @@ export function SkillsTab({ skills, onChange }) {
   }
 
   const handleDelete = (name) => {
-    if (!window.confirm(`Delete skill "${name}"?`)) return
+    if (!window.confirm(`删除技能 "${name}"？`)) return
     const newSkills = { ...skills }
     delete newSkills[name]
     onChange(newSkills)
@@ -52,9 +52,9 @@ export function SkillsTab({ skills, onChange }) {
       <div className="rounded-2xl border border-black/5 bg-white/50 p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-neutral-700">Skills</h3>
+            <h3 className="text-sm font-semibold text-neutral-700">技能</h3>
             <p className="mt-1 text-xs text-neutral-500">
-              Skills are automatically triggered by Claude based on their descriptions.
+              技能会由 Claude 根据描述自动触发。
             </p>
           </div>
           <button
@@ -62,7 +62,7 @@ export function SkillsTab({ skills, onChange }) {
             onClick={handleAdd}
             className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
           >
-            + Add Skill
+            + 添加技能
           </button>
         </div>
       </div>
@@ -70,13 +70,13 @@ export function SkillsTab({ skills, onChange }) {
       {/* Skill List */}
       {skillList.length === 0 && !editingSkill ? (
         <div className="rounded-2xl border border-dashed border-black/10 bg-white/50 p-8 text-center">
-          <p className="text-sm text-neutral-500">No skills defined yet.</p>
+          <p className="text-sm text-neutral-500">尚未定义技能。</p>
           <button
             type="button"
             onClick={handleAdd}
             className="mt-3 text-sm font-medium text-emerald-600 hover:text-emerald-700"
           >
-            + Create your first skill
+            + 创建第一个技能
           </button>
         </div>
       ) : (
@@ -94,8 +94,8 @@ export function SkillsTab({ skills, onChange }) {
                   </div>
                   <p className="mt-1 text-sm text-neutral-500">{skill.description}</p>
                   <p className="mt-2 text-xs text-neutral-400">
-                    📄 SKILL.md ({skill.content?.split('\n').length || 0} lines)
-                    {skill.resources?.length > 0 && ` + ${skill.resources.length} resources`}
+                    📄 SKILL.md（{skill.content?.split('\n').length || 0} 行）
+                    {skill.resources?.length > 0 && ` + ${skill.resources.length} 个资源`}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -104,14 +104,14 @@ export function SkillsTab({ skills, onChange }) {
                     onClick={() => handleEdit(name, skill)}
                     className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
                   >
-                    Edit
+                    编辑
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(name)}
                     className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
                   >
-                    Delete
+                    删除
                   </button>
                 </div>
               </div>
@@ -124,12 +124,12 @@ export function SkillsTab({ skills, onChange }) {
       {editingSkill && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5">
           <h3 className="mb-4 text-sm font-semibold text-emerald-800">
-            {isAdding ? 'Add Skill' : `Edit: ${editingSkill.name}`}
+            {isAdding ? '添加技能' : `编辑：${editingSkill.name}`}
           </h3>
           <div className="space-y-4">
             <div className="flex flex-col gap-2">
               <label className={labelClass}>
-                Skill Name <span className="text-red-500">*</span>
+                技能名称 <span className="text-red-500">*</span>
               </label>
               <input
                 className={inputClass}
@@ -141,25 +141,25 @@ export function SkillsTab({ skills, onChange }) {
             </div>
             <div className="flex flex-col gap-2">
               <label className={labelClass}>
-                Description <span className="text-red-500">*</span>
+                描述 <span className="text-red-500">*</span>
               </label>
               <textarea
                 className={`${inputClass} min-h-[80px]`}
-                placeholder="Review code for bugs, security vulnerabilities, and performance issues..."
+                placeholder="审查代码中的缺陷、安全漏洞和性能问题..."
                 value={editingSkill.description}
                 onChange={(e) => setEditingSkill({ ...editingSkill, description: e.target.value })}
               />
               <p className="text-xs text-neutral-400">
-                Be specific! Claude uses this to decide when to trigger the skill.
+                描述越具体越好！Claude 会据此决定触发时机。
               </p>
             </div>
             <div className="flex flex-col gap-2">
               <label className={labelClass}>
-                Instructions (SKILL.md) <span className="text-red-500">*</span>
+                说明（SKILL.md） <span className="text-red-500">*</span>
               </label>
               <textarea
                 className={`${inputClass} min-h-[200px] font-mono text-xs`}
-                placeholder="# Code Review Guidelines&#10;&#10;## Process&#10;1. Read through the entire file first..."
+                placeholder="# 代码审查指南&#10;&#10;## 流程&#10;1. 先通读整个文件..."
                 value={editingSkill.content}
                 onChange={(e) => setEditingSkill({ ...editingSkill, content: e.target.value })}
               />
@@ -173,7 +173,7 @@ export function SkillsTab({ skills, onChange }) {
                 }}
                 className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
               >
-                Cancel
+                取消
               </button>
               <button
                 type="button"
@@ -181,7 +181,7 @@ export function SkillsTab({ skills, onChange }) {
                 disabled={!editingSkill.name || !editingSkill.description || !editingSkill.content}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300"
               >
-                Save Skill
+                保存技能
               </button>
             </div>
           </div>

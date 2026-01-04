@@ -30,9 +30,9 @@ const parseJsonField = (value) => {
 }
 
 const formatTime = (value) => {
-  if (!value) return 'n/a'
+  if (!value) return '暂无'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'n/a'
+  if (Number.isNaN(date.getTime())) return '暂无'
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
@@ -138,6 +138,13 @@ function App() {
     [agents, selectedAgentId]
   )
   const isAgentRunning = selectedAgent?.status === 'running'
+  const statusTextMap = {
+    running: '运行中',
+    stopped: '已停止',
+    exited: '已退出',
+    created: '已创建',
+    missing: '未知',
+  }
 
   const fetchAgents = useCallback(async () => {
     setLoading(true)
@@ -145,7 +152,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/api/agents`)
       if (!response.ok) {
-        throw new Error(`Failed to load agents (${response.status})`)
+        throw new Error(`加载 Agent 失败 (${response.status})`)
       }
       const data = await response.json()
       setAgents(data)
@@ -205,7 +212,7 @@ function App() {
   }
 
   const handleDeleteSubAgent = (name) => {
-    if (!window.confirm(`Delete sub-agent "${name}"?`)) return
+    if (!window.confirm(`删除子 Agent "${name}"？`)) return
     setSubAgents((prev) => {
       const next = { ...prev }
       delete next[name]
@@ -248,7 +255,7 @@ function App() {
 
     if (!response.ok || !response.body) {
       const detail = await response.text()
-      throw new Error(detail || `Failed to query agent (${response.status})`)
+      throw new Error(detail || `请求 Agent 失败 (${response.status})`)
     }
 
     const reader = response.body.getReader()
@@ -296,7 +303,7 @@ function App() {
           if (event.type === 'error') {
             updateMessages(agentId, (current) => [
               ...current,
-              { role: 'assistant', content: `[error] ${event.message || 'Unknown error'}` },
+              { role: 'assistant', content: `[错误] ${event.message || '未知错误'}` },
             ])
           }
         }
@@ -306,16 +313,16 @@ function App() {
 
   const handleSendMessage = async () => {
     if (!selectedAgentId) {
-      setErrorMessage('Select an agent before sending a message.')
+      setErrorMessage('发送消息前请先选择一个 Agent。')
       return
     }
     if (!selectedAgent || selectedAgent.status !== 'running') {
-      setErrorMessage('Agent is not running. Start the agent before chatting.')
+      setErrorMessage('Agent 未在运行。请先启动再聊天。')
       return
     }
     const session = sessionByAgent[selectedAgentId]
     if (!session?.sessionId || !session?.sessionToken) {
-      setErrorMessage('Selected agent is missing a session token. Relaunch to create one.')
+      setErrorMessage('所选 Agent 缺少 session token。请重新启动以创建。')
       return
     }
     if (!messageInput.trim()) return
@@ -341,7 +348,7 @@ function App() {
     } catch (error) {
       updateMessages(selectedAgentId, (current) => [
         ...current,
-        { role: 'assistant', content: `[error] ${error.message}` },
+        { role: 'assistant', content: `[错误] ${error.message}` },
       ])
     } finally {
       finalizeAssistant(selectedAgentId)
@@ -352,11 +359,11 @@ function App() {
   const handleLaunch = async () => {
     setErrorMessage('')
     if (mcpServersParsed.error) {
-      setErrorMessage(`MCP servers JSON error: ${mcpServersParsed.error}`)
+      setErrorMessage(`MCP Servers JSON 错误：${mcpServersParsed.error}`)
       return
     }
     if (mcpEnvParsed.error) {
-      setErrorMessage(`MCP env JSON error: ${mcpEnvParsed.error}`)
+      setErrorMessage(`MCP 环境变量 JSON 错误：${mcpEnvParsed.error}`)
       return
     }
 
@@ -378,7 +385,7 @@ function App() {
       })
       if (!response.ok) {
         const detail = await response.text()
-        throw new Error(detail || `Failed to launch agent (${response.status})`)
+        throw new Error(detail || `启动 Agent 失败 (${response.status})`)
       }
       const created = await response.json()
       setSessionByAgent((prev) => ({
@@ -402,7 +409,7 @@ function App() {
     setErrorMessage('')
     const session = sessionByAgent[agentId]
     if (!session?.sessionToken) {
-      setErrorMessage('Missing session token for stop.')
+      setErrorMessage('缺少用于停止的 session token。')
       return
     }
     try {
@@ -412,7 +419,7 @@ function App() {
       })
       if (!response.ok) {
         const detail = await response.text()
-        throw new Error(detail || `Failed to stop agent (${response.status})`)
+        throw new Error(detail || `停止 Agent 失败 (${response.status})`)
       }
       await fetchAgents()
     } catch (error) {
@@ -424,7 +431,7 @@ function App() {
     setErrorMessage('')
     const session = sessionByAgent[agentId]
     if (!session?.sessionToken) {
-      setErrorMessage('Missing session token for start.')
+      setErrorMessage('缺少用于启动的 session token。')
       return
     }
     try {
@@ -434,7 +441,7 @@ function App() {
       })
       if (!response.ok) {
         const detail = await response.text()
-        throw new Error(detail || `Failed to start agent (${response.status})`)
+        throw new Error(detail || `启动 Agent 失败 (${response.status})`)
       }
       await fetchAgents()
     } catch (error) {
@@ -446,10 +453,10 @@ function App() {
     setErrorMessage('')
     const session = sessionByAgent[agentId]
     if (!session?.sessionToken) {
-      setErrorMessage('Missing session token for delete.')
+      setErrorMessage('缺少用于删除的 session token。')
       return
     }
-    if (!window.confirm('Delete this agent and its workspace volume?')) {
+    if (!window.confirm('删除此 Agent 及其 workspace volume？')) {
       return
     }
     try {
@@ -459,7 +466,7 @@ function App() {
       })
       if (!response.ok) {
         const detail = await response.text()
-        throw new Error(detail || `Failed to delete agent (${response.status})`)
+        throw new Error(detail || `删除 Agent 失败 (${response.status})`)
       }
       setSessionByAgent((prev) => {
         if (!prev[agentId]) return prev
@@ -483,25 +490,25 @@ function App() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-neutral-500">
-                AgentDeck Control Plane
+                AgentDeck 控制面板
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-neutral-900 md:text-4xl">
-                Orchestrate Claude agents with clear sightlines.
+                清晰编排 Claude Agent。
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-neutral-600">
-                Deploy AgCluster containers, shape their runtime config, and tail live logs in one place.
+                在一处部署 AgCluster 容器、配置运行时参数，并查看实时日志。
               </p>
             </div>
             <div className="flex items-center gap-3">
               <span className="badge status-running">
-                <span className="badge-dot bg-emerald-600" /> Docker ready
+                <span className="badge-dot bg-emerald-600" /> Docker 就绪
               </span>
               <button
                 className="rounded-full border border-black/10 bg-white/80 px-4 py-2 text-sm font-semibold text-neutral-800 transition hover:-translate-y-0.5 hover:shadow-glow"
                 onClick={fetchAgents}
                 disabled={loading}
               >
-                {loading ? 'Refreshing...' : 'Refresh'}
+                {loading ? '刷新中...' : '刷新'}
               </button>
             </div>
           </div>
@@ -515,13 +522,13 @@ function App() {
         <main className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)_360px] xl:grid-cols-[300px_minmax(0,1fr)_420px]">
           <aside className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '80ms' }}>
             <div className="flex items-center justify-between">
-              <h2 className="section-title">Running Agents</h2>
+              <h2 className="section-title">运行中的 Agent</h2>
               <span className="text-xs text-neutral-500">{agents.length}</span>
             </div>
             <div className="flex flex-col gap-3">
               {agents.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/10 bg-white/60 px-4 py-6 text-sm text-neutral-500">
-                  No live agents yet. Launch one from the center panel.
+                  暂无在线 Agent。请在中间面板启动一个。
                 </div>
               ) : (
                 agents.map((agent) => {
@@ -538,6 +545,7 @@ function App() {
                       : normalizedStatus === 'stopped'
                         ? { badge: 'status-stopped', dot: 'bg-orange-500' }
                         : { badge: 'status-missing', dot: 'bg-neutral-500' }
+                  const statusDisplay = statusTextMap[agent.status] || agent.status
                   return (
                     <div
                       key={agent.agent_id}
@@ -556,36 +564,36 @@ function App() {
                           </p>
                           <p className="text-xs text-neutral-500">{agent.agent_id}</p>
                           <p className="mt-2 text-xs text-neutral-500">
-                            {agent.host_port ? `Port ${agent.host_port}` : 'No port yet'} - {formatTime(agent.created_at)}
+                            {agent.host_port ? `端口 ${agent.host_port}` : '暂无端口'} - {formatTime(agent.created_at)}
                           </p>
                         </div>
                         <span className={`badge ${statusStyle.badge}`}>
-                          <span className={`badge-dot ${statusStyle.dot}`} /> {agent.status}
+                          <span className={`badge-dot ${statusStyle.dot}`} /> {statusDisplay}
                         </span>
                       </button>
                       <div className="mt-3 flex items-center justify-between text-xs text-neutral-500">
-                        <span>container</span>
+                        <span>容器</span>
                         <div className="flex items-center gap-2">
                           {normalizedStatus === 'running' ? (
                             <button
                               className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
                               onClick={() => handleStop(agent.agent_id)}
                             >
-                              Stop
+                              停止
                             </button>
                           ) : (
                             <button
                               className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
                               onClick={() => handleStart(agent.agent_id)}
                             >
-                              Start
+                              启动
                             </button>
                           )}
                           <button
                             className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
                             onClick={() => handleDelete(agent.agent_id)}
                           >
-                            Delete
+                            删除
                           </button>
                         </div>
                       </div>
@@ -600,6 +608,8 @@ function App() {
             <CreateView
               launching={launching}
               onLaunch={handleLaunch}
+              canGoToRun={Boolean(selectedAgentId)}
+              onGoToRun={() => setActiveView('run')}
               activeConfigTab={activeConfigTab}
               onChangeConfigTab={setActiveConfigTab}
               form={form}
@@ -617,21 +627,23 @@ function App() {
               previewConfig={previewConfig}
             />
           ) : (
-            <RunView
-              selectedAgentId={selectedAgentId}
-              selectedAgent={selectedAgent}
-              isAgentRunning={isAgentRunning}
-              onStopAgent={handleStop}
-              onStartAgent={handleStart}
-              onConfigure={() => setActiveView('create')}
-              messages={messages}
-              messageInput={messageInput}
-              onMessageInput={setMessageInput}
-              onSendMessage={handleSendMessage}
-              isStreaming={isStreaming}
-              messagesEndRef={messagesEndRef}
-              wsBase={WS_BASE}
-            />
+            <div className="lg:col-span-2">
+              <RunView
+                selectedAgentId={selectedAgentId}
+                selectedAgent={selectedAgent}
+                isAgentRunning={isAgentRunning}
+                onStopAgent={handleStop}
+                onStartAgent={handleStart}
+                onConfigure={() => setActiveView('create')}
+                messages={messages}
+                messageInput={messageInput}
+                onMessageInput={setMessageInput}
+                onSendMessage={handleSendMessage}
+                isStreaming={isStreaming}
+                messagesEndRef={messagesEndRef}
+                wsBase={WS_BASE}
+              />
+            </div>
           )}
         </main>
 

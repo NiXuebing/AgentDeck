@@ -58,7 +58,7 @@ export function ToolboxTab({ form, onChange, mcpServers, onMcpServersChange }) {
               onClick={() => selectAllInGroup(groupKey)}
               className="text-xs text-emerald-600 hover:text-emerald-700"
             >
-              Select All
+              全选
             </button>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -98,7 +98,7 @@ export function ToolboxTab({ form, onChange, mcpServers, onMcpServersChange }) {
                     }}
                     className="text-emerald-600"
                   />
-                  Allow all commands
+                  允许所有命令
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -111,7 +111,7 @@ export function ToolboxTab({ form, onChange, mcpServers, onMcpServersChange }) {
                     }}
                     className="text-emerald-600"
                   />
-                  Restrict to patterns
+                  限定为特定模式
                 </label>
               </div>
               {bashMode === 'patterns' && (
@@ -146,7 +146,7 @@ export function ToolboxTab({ form, onChange, mcpServers, onMcpServersChange }) {
                       onClick={addBashPattern}
                       className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
                     >
-                      Add
+                      添加
                     </button>
                   </div>
                 </div>
@@ -159,16 +159,16 @@ export function ToolboxTab({ form, onChange, mcpServers, onMcpServersChange }) {
       {/* MCP Servers */}
       <div className="rounded-2xl border border-black/5 bg-white/50 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-neutral-700">MCP Servers</h3>
+          <h3 className="text-sm font-semibold text-neutral-700">MCP 服务器</h3>
           <button
             type="button"
             className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
           >
-            + Add Server
+            + 添加服务器
           </button>
         </div>
         <div className="flex flex-col gap-2">
-          <label className={labelClass}>MCP Servers (JSON)</label>
+          <label className={labelClass}>MCP 服务器（JSON）</label>
           <textarea
             className={`${inputClass} min-h-[100px] font-mono text-xs`}
             placeholder='{"github": {"type": "http", "url": "http://localhost:9999"}}'

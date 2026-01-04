@@ -44,5 +44,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Add /app to Python path so uvicorn can find agent_server.py
 ENV PYTHONPATH=/app
 
-# Start agent server with uvicorn
-CMD ["uvicorn", "agent_server:app", "--host", "0.0.0.0", "--port", "3000"]
+# Start agent server with uvicorn (disable access logs to reduce noise)
+CMD ["uvicorn", "agent_server:app", "--host", "0.0.0.0", "--port", "3000", "--no-access-log"]

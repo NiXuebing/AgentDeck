@@ -63,7 +63,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-neutral-800">
-            {isNew ? 'Add Sub-Agent' : `Edit: ${agent?.name}`}
+            {isNew ? '添加子 Agent' : `编辑：${agent?.name}`}
           </h2>
           <button
             type="button"
@@ -77,7 +77,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
         {/* Templates */}
         {showTemplates && (
           <div className="mb-6">
-            <h3 className="mb-3 text-sm font-medium text-neutral-600">Start from template</h3>
+            <h3 className="mb-3 text-sm font-medium text-neutral-600">从模板开始</h3>
             <div className="grid grid-cols-3 gap-3">
               {SUBAGENT_TEMPLATES.map((template) => (
                 <button
@@ -97,8 +97,8 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
                 className="rounded-xl border border-dashed border-black/10 p-4 text-left transition hover:border-neutral-300"
               >
                 <span className="text-2xl">📄</span>
-                <p className="mt-2 font-medium text-neutral-800">Blank</p>
-                <p className="text-xs text-neutral-500">Start from scratch</p>
+                <p className="mt-2 font-medium text-neutral-800">空白</p>
+                <p className="text-xs text-neutral-500">从零开始</p>
               </button>
             </div>
           </div>
@@ -110,7 +110,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
             {/* Identity */}
             <div className="grid gap-4 md:grid-cols-[auto_1fr]">
               <div className="flex flex-col gap-2">
-                <label className={labelClass}>Icon</label>
+                <label className={labelClass}>图标</label>
                 <div className="flex gap-1">
                   {ICONS.map((icon) => (
                     <button
@@ -130,7 +130,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
               </div>
               <div className="flex flex-col gap-2">
                 <label className={labelClass}>
-                  Agent Name <span className="text-red-500">*</span>
+                  Agent 名称 <span className="text-red-500">*</span>
                 </label>
                 <input
                   className={inputClass}
@@ -145,11 +145,11 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
 
             <div className="flex flex-col gap-2">
               <label className={labelClass}>
-                Description (When to use) <span className="text-red-500">*</span>
+                描述（适用场景） <span className="text-red-500">*</span>
               </label>
               <textarea
                 className={`${inputClass} min-h-[80px]`}
-                placeholder="Frontend development tasks including React components, Next.js pages..."
+                placeholder="前端开发任务，包括 React 组件、Next.js 页面..."
                 value={form.description}
                 onChange={handleChange('description')}
               />
@@ -157,18 +157,18 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
 
             <div className="flex flex-col gap-2">
               <label className={labelClass}>
-                System Prompt <span className="text-red-500">*</span>
+                系统提示词 <span className="text-red-500">*</span>
               </label>
               <textarea
                 className={`${inputClass} min-h-[160px] font-mono text-xs`}
-                placeholder="You are a senior frontend engineer specializing in..."
+                placeholder="你是一位资深前端工程师，擅长..."
                 value={form.prompt}
                 onChange={handleChange('prompt')}
               />
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className={labelClass}>Model</label>
+              <label className={labelClass}>模型</label>
               <div className="flex gap-2">
                 {MODELS.map((m) => (
                   <button
@@ -189,7 +189,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
 
             {/* Tools */}
             <div className="flex flex-col gap-2">
-              <label className={labelClass}>Allowed Tools</label>
+              <label className={labelClass}>允许的工具</label>
               <div className="mb-2 flex items-center gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -197,7 +197,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
                     checked={form.inheritTools}
                     onChange={() => setForm({ ...form, inheritTools: true })}
                   />
-                  Inherit from main agent
+                  继承主 Agent
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -205,7 +205,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
                     checked={!form.inheritTools}
                     onChange={() => setForm({ ...form, inheritTools: false })}
                   />
-                  Select specific tools
+                  选择指定工具
                 </label>
               </div>
               {!form.inheritTools && (
@@ -230,7 +230,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
                 </div>
               )}
               <p className="text-xs text-neutral-400">
-                Sub-agents cannot delegate to other sub-agents (no Task tool).
+                子 Agent 不能再委派给其他子 Agent（无 Task 工具）。
               </p>
             </div>
 
@@ -241,7 +241,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
                 onClick={onCancel}
                 className="rounded-xl border border-black/10 px-5 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
               >
-                Cancel
+                取消
               </button>
               <button
                 type="button"
@@ -249,7 +249,7 @@ export function SubAgentEditor({ agent, isNew, onSave, onCancel }) {
                 disabled={!form.name || !form.description || !form.prompt}
                 className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300"
               >
-                Save Sub-Agent
+                保存子 Agent
               </button>
             </div>
           </div>

@@ -22,6 +22,15 @@ function RunView({
   const [terminalReady, setTerminalReady] = useState(false)
 
   const statusLabel = selectedAgent?.status || 'idle'
+  const statusTextMap = {
+    running: '运行中',
+    stopped: '已停止',
+    exited: '已退出',
+    created: '已创建',
+    missing: '未知',
+    idle: '空闲',
+  }
+  const statusDisplay = statusTextMap[statusLabel] || statusLabel
   const statusStyle =
     statusLabel === 'running'
       ? { badge: 'status-running', dot: 'bg-emerald-600' }
@@ -54,7 +63,7 @@ function RunView({
       term.loadAddon(fitAddon)
       term.open(terminalHostRef.current)
       fitAddon.fit()
-      term.writeln('AgentDeck log stream ready. Select an agent to attach logs.')
+      term.writeln('AgentDeck 日志流已就绪。请选择一个 Agent 来接入日志。')
       termRef.current = term
       fitRef.current = fitAddon
       setTerminalReady(true)
@@ -89,11 +98,11 @@ function RunView({
     }
 
     if (!selectedAgentId) {
-      termRef.current.writeln('No agent selected.')
+      termRef.current.writeln('未选择 Agent。')
       return undefined
     }
 
-    termRef.current.writeln(`\r\n--- streaming logs for ${selectedAgentId} ---`)
+    termRef.current.writeln(`\r\n--- 正在流式输出 ${selectedAgentId} 的日志 ---`)
     const ws = new WebSocket(`${wsBase}/ws/agents/${selectedAgentId}/logs`)
     wsRef.current = ws
 
@@ -102,11 +111,11 @@ function RunView({
     }
 
     ws.onerror = () => {
-      termRef.current?.writeln('[error] log stream error')
+      termRef.current?.writeln('[错误] 日志流出错')
     }
 
     ws.onclose = () => {
-      termRef.current?.writeln('--- log stream closed ---')
+      termRef.current?.writeln('--- 日志流已关闭 ---')
     }
 
     return () => {
@@ -115,13 +124,13 @@ function RunView({
   }, [selectedAgentId, terminalReady, wsBase])
 
   return (
-    <>
-      <section className="glass reveal flex flex-col gap-4 p-6" style={{ '--delay': '140ms' }}>
+    <div className="flex flex-col gap-6">
+      <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '140ms' }}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="section-title">Runtime Overview</h2>
+            <h2 className="section-title">运行时概览</h2>
             <p className="mt-1 text-xs text-neutral-500">
-              Monitor the live agent and jump back to configuration when needed.
+              监控运行中的 Agent，必要时返回配置。
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -129,19 +138,19 @@ function RunView({
               className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-black/20"
               onClick={onConfigure}
             >
-              Configure
+              配置
             </button>
             <span className={`badge ${statusStyle.badge}`}>
-              <span className={`badge-dot ${statusStyle.dot}`} /> {statusLabel}
+              <span className={`badge-dot ${statusStyle.dot}`} /> {statusDisplay}
             </span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm text-neutral-600">
           <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1">
-            Agent: {selectedAgentId || 'none'}
+            Agent：{selectedAgentId || '无'}
           </span>
           <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1">
-            Port: {selectedAgent?.host_port || 'n/a'}
+            端口：{selectedAgent?.host_port || '暂无'}
           </span>
           {selectedAgentId ? (
             isAgentRunning ? (
@@ -149,37 +158,37 @@ function RunView({
                 className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
                 onClick={() => onStopAgent(selectedAgentId)}
               >
-                Stop
+                停止
               </button>
             ) : (
               <button
                 className="rounded-full border border-black/10 bg-white/80 px-3 py-1 font-semibold text-neutral-700 transition hover:border-black/20"
                 onClick={() => onStartAgent(selectedAgentId)}
               >
-                Start
+                启动
               </button>
             )
           ) : null}
         </div>
       </section>
 
-      <div className="flex flex-col gap-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '200ms' }}>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="section-title">Conversation</h2>
+              <h2 className="section-title">对话</h2>
               <p className="mt-1 text-xs text-neutral-500">
-                Send a prompt to the selected agent and watch the stream.
+                向所选 Agent 发送提示并观看流式输出。
               </p>
             </div>
             <span className="badge status-running">
-              <span className="badge-dot bg-emerald-600" /> {selectedAgentId || 'no agent'}
+              <span className="badge-dot bg-emerald-600" /> {selectedAgentId || '无 Agent'}
             </span>
           </div>
-          <div className="glass-strong flex h-[260px] flex-col gap-3 overflow-y-auto p-4">
+          <div className="glass-strong flex min-h-[320px] flex-col gap-3 overflow-y-auto p-4 lg:min-h-[420px]">
             {messages.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-4 py-6 text-sm text-neutral-500">
-                Select an agent and send a message to start chatting.
+                选择一个 Agent 并发送消息开始对话。
               </div>
             ) : (
               messages.map((message, index) => {
@@ -199,7 +208,7 @@ function RunView({
                       <p className="whitespace-pre-wrap">{message.content || '...'}</p>
                       {message.streaming ? (
                         <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-neutral-400">
-                          streaming
+                          流式中
                         </p>
                       ) : null}
                     </div>
@@ -215,9 +224,9 @@ function RunView({
               placeholder={
                 selectedAgentId
                   ? isAgentRunning
-                    ? 'Ask the agent something...'
-                    : 'Start the agent to begin chatting.'
-                  : 'Select an agent to start chatting.'
+                    ? '问 Agent 一个问题...'
+                    : '请先启动 Agent 再聊天。'
+                  : '选择一个 Agent 开始聊天。'
               }
               value={messageInput}
               onChange={(event) => onMessageInput(event.target.value)}
@@ -234,7 +243,7 @@ function RunView({
               onClick={onSendMessage}
               disabled={!selectedAgentId || !isAgentRunning || isStreaming || !messageInput.trim()}
             >
-              {isStreaming ? 'Sending...' : 'Send'}
+              {isStreaming ? '发送中...' : '发送'}
             </button>
           </div>
         </section>
@@ -242,9 +251,9 @@ function RunView({
         <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '240ms' }}>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="section-title">Live Logs</h2>
+              <h2 className="section-title">实时日志</h2>
               <p className="mt-1 text-xs text-neutral-500">
-                WebSocket stream from the container runtime.
+                来自容器运行时的 WebSocket 流。
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -253,23 +262,23 @@ function RunView({
                 onClick={() => {
                   if (!termRef.current) return
                   termRef.current.clear()
-                  termRef.current.writeln('Logs cleared.')
+                  termRef.current.writeln('日志已清空。')
                 }}
               >
-                Clear
+                清空
               </button>
             </div>
           </div>
           <div className="flex-1 rounded-2xl bg-[#0b1216] p-3">
-            <div ref={terminalHostRef} className="h-[220px] w-full sm:h-[260px] lg:h-[300px]" />
+            <div ref={terminalHostRef} className="h-[260px] w-full sm:h-[320px] lg:h-[420px]" />
           </div>
           <div className="flex items-center justify-between rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-neutral-500">
-            <span>Streaming: {selectedAgentId || 'none'}</span>
+            <span>流式：{selectedAgentId || '无'}</span>
             <span>{wsBase.replace(/^wss?:\/\//, '')}</span>
           </div>
         </section>
       </div>
-    </>
+    </div>
   )
 }
 

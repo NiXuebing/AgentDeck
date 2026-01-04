@@ -31,30 +31,30 @@ export function PreviewPanel({ config, agents, skills, commands }) {
     const errors = []
     const warnings = []
 
-    if (!config.id) errors.push('Config ID is required')
-    if (!config.name) errors.push('Display Name is required')
-    if (!config.allowed_tools?.length) errors.push('At least one tool must be enabled')
+    if (!config.id) errors.push('需要配置 ID')
+    if (!config.name) errors.push('需要显示名称')
+    if (!config.allowed_tools?.length) errors.push('至少启用一个工具')
 
     Object.entries(agents || {}).forEach(([name, agent]) => {
-      if (!agent.description) errors.push(`Sub-agent "${name}" missing description`)
-      if (!agent.prompt) errors.push(`Sub-agent "${name}" missing system prompt`)
+      if (!agent.description) errors.push(`子 Agent "${name}" 缺少描述`)
+      if (!agent.prompt) errors.push(`子 Agent "${name}" 缺少系统提示词`)
     })
 
     if (Object.keys(agents || {}).length > 0 && !config.allowed_tools?.includes('Task')) {
-      warnings.push('Task tool not enabled - sub-agents won\'t work')
+      warnings.push('未启用 Task 工具，子 Agent 将无法工作')
     }
 
     Object.entries(skills || {}).forEach(([name, skill]) => {
-      if (!skill.description) errors.push(`Skill "${name}" missing description`)
-      if (!skill.content) errors.push(`Skill "${name}" missing SKILL.md content`)
+      if (!skill.description) errors.push(`Skill "${name}" 缺少描述`)
+      if (!skill.content) errors.push(`Skill "${name}" 缺少 SKILL.md 内容`)
     })
 
     if (Object.keys(skills || {}).length > 0 && !config.allowed_tools?.includes('Skill')) {
-      warnings.push('Skill tool not enabled - skills won\'t work')
+      warnings.push('未启用 Skill 工具，技能将无法工作')
     }
 
     Object.entries(commands || {}).forEach(([name, cmd]) => {
-      if (!cmd.prompt) errors.push(`Command "/${name}" missing prompt`)
+      if (!cmd.prompt) errors.push(`命令 "/${name}" 缺少提示词`)
     })
 
     return { errors, warnings, passed: errors.length === 0 }
@@ -65,9 +65,9 @@ export function PreviewPanel({ config, agents, skills, commands }) {
   }, [config])
 
   const tabs = [
-    { id: 'files', label: '📁 Files' },
-    { id: 'config', label: '📄 Config' },
-    { id: 'validate', label: validation.passed ? '✅ Validate' : '❌ Validate' },
+    { id: 'files', label: '📁 文件' },
+    { id: 'config', label: '📄 配置' },
+    { id: 'validate', label: validation.passed ? '✅ 校验' : '❌ 校验' },
   ]
 
   return (
@@ -108,15 +108,15 @@ export function PreviewPanel({ config, agents, skills, commands }) {
                   onClick={() => setViewingFile(file)}
                   className="text-xs text-emerald-600 hover:text-emerald-700"
                 >
-                  👁 View
+                  👁 查看
                 </button>
               </div>
             ))}
             <div className="mt-4 rounded-xl bg-neutral-50 p-3 text-xs text-neutral-500">
-              <strong>Summary:</strong> {files.length} files |{' '}
-              {Object.keys(agents || {}).length} sub-agents |{' '}
-              {Object.keys(skills || {}).length} skills |{' '}
-              {Object.keys(commands || {}).length} commands
+              <strong>汇总：</strong> {files.length} 个文件 |{' '}
+              {Object.keys(agents || {}).length} 个子 Agent |{' '}
+              {Object.keys(skills || {}).length} 个技能 |{' '}
+              {Object.keys(commands || {}).length} 个命令
             </div>
           </div>
         )}
@@ -130,7 +130,7 @@ export function PreviewPanel({ config, agents, skills, commands }) {
                 onClick={() => navigator.clipboard.writeText(configJson)}
                 className="text-xs text-emerald-600 hover:text-emerald-700"
               >
-                Copy
+                复制
               </button>
             </div>
             <pre className="overflow-auto rounded-xl bg-neutral-900 p-4 text-xs text-emerald-100">
@@ -148,15 +148,15 @@ export function PreviewPanel({ config, agents, skills, commands }) {
                   : 'bg-red-50 text-red-800'
               }`}
             >
-              <strong>{validation.passed ? '✅ PASSED' : '❌ FAILED'}</strong>
+              <strong>{validation.passed ? '✅ 通过' : '❌ 未通过'}</strong>
               <span className="ml-2 text-sm">
-                {validation.errors.length} errors, {validation.warnings.length} warnings
+                {validation.errors.length} 个错误，{validation.warnings.length} 个警告
               </span>
             </div>
 
             {validation.errors.length > 0 && (
               <div className="space-y-1">
-                <h4 className="text-sm font-medium text-red-700">Errors</h4>
+                <h4 className="text-sm font-medium text-red-700">错误</h4>
                 {validation.errors.map((err, i) => (
                   <div key={i} className="text-sm text-red-600">
                     ❌ {err}
@@ -167,7 +167,7 @@ export function PreviewPanel({ config, agents, skills, commands }) {
 
             {validation.warnings.length > 0 && (
               <div className="space-y-1">
-                <h4 className="text-sm font-medium text-orange-700">Warnings</h4>
+                <h4 className="text-sm font-medium text-orange-700">警告</h4>
                 {validation.warnings.map((warn, i) => (
                   <div key={i} className="text-sm text-orange-600">
                     ⚠️ {warn}

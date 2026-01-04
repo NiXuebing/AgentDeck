@@ -45,7 +45,7 @@ afterEach(() => {
 test('renders quick create entry', async () => {
   await renderApp()
   await waitFor(() => {
-    expect(screen.getByText(/Launch Agent/i)).toBeInTheDocument()
+    expect(screen.getByText(/启动 Agent/i)).toBeInTheDocument()
   })
 })
 
@@ -59,5 +59,5 @@ test('switches to run view after create', async () => {
   await renderApp()
   const createButton = await screen.findByRole('button', { name: /创建并启动/i })
   fireEvent.click(createButton)
-  expect(await screen.findByText(/Conversation/i)).toBeInTheDocument()
+  expect(await screen.findByText(/对话/i)).toBeInTheDocument()
 })

@@ -40,7 +40,7 @@ export function CommandsTab({ commands, onChange }) {
   }
 
   const handleDelete = (name) => {
-    if (!window.confirm(`Delete command "/${name}"?`)) return
+    if (!window.confirm(`删除命令 "/${name}"？`)) return
     const newCommands = { ...commands }
     delete newCommands[name]
     onChange(newCommands)
@@ -57,9 +57,9 @@ export function CommandsTab({ commands, onChange }) {
       <div className="rounded-2xl border border-black/5 bg-white/50 p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-neutral-700">Slash Commands</h3>
+            <h3 className="text-sm font-semibold text-neutral-700">Slash 命令</h3>
             <p className="mt-1 text-xs text-neutral-500">
-              Commands are triggered manually by typing /{'{name}'} in chat.
+              在聊天中输入 /{'{name}'} 可手动触发命令。
             </p>
           </div>
           <button
@@ -67,7 +67,7 @@ export function CommandsTab({ commands, onChange }) {
             onClick={handleAdd}
             className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
           >
-            + Add Command
+            + 添加命令
           </button>
         </div>
       </div>
@@ -75,13 +75,13 @@ export function CommandsTab({ commands, onChange }) {
       {/* Command List */}
       {commandList.length === 0 && !editingCommand ? (
         <div className="rounded-2xl border border-dashed border-black/10 bg-white/50 p-8 text-center">
-          <p className="text-sm text-neutral-500">No commands defined yet.</p>
+          <p className="text-sm text-neutral-500">尚未定义命令。</p>
           <button
             type="button"
             onClick={handleAdd}
             className="mt-3 text-sm font-medium text-emerald-600 hover:text-emerald-700"
           >
-            + Create your first command
+            + 创建第一个命令
           </button>
         </div>
       ) : (
@@ -97,10 +97,10 @@ export function CommandsTab({ commands, onChange }) {
                     <span className="text-lg">⚡</span>
                     <h4 className="font-semibold text-neutral-800">/{name}</h4>
                   </div>
-                  <p className="mt-1 text-sm text-neutral-500">{command.description || 'No description'}</p>
+                  <p className="mt-1 text-sm text-neutral-500">{command.description || '无描述'}</p>
                   <div className="mt-2 flex gap-3 text-xs text-neutral-400">
-                    {command.argumentHint && <span>Args: {command.argumentHint}</span>}
-                    {command.model && <span>Model: {command.model}</span>}
+                    {command.argumentHint && <span>参数：{command.argumentHint}</span>}
+                    {command.model && <span>模型：{command.model}</span>}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -109,14 +109,14 @@ export function CommandsTab({ commands, onChange }) {
                     onClick={() => handleEdit(name, command)}
                     className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
                   >
-                    Edit
+                    编辑
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(name)}
                     className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
                   >
-                    Delete
+                    删除
                   </button>
                 </div>
               </div>
@@ -129,13 +129,13 @@ export function CommandsTab({ commands, onChange }) {
       {editingCommand && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5">
           <h3 className="mb-4 text-sm font-semibold text-emerald-800">
-            {isAdding ? 'Add Command' : `Edit: /${editingCommand.name}`}
+            {isAdding ? '添加命令' : `编辑：/${editingCommand.name}`}
           </h3>
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <label className={labelClass}>
-                  Command Name <span className="text-red-500">*</span>
+                  命令名称 <span className="text-red-500">*</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <span className="text-neutral-400">/</span>
@@ -149,16 +149,16 @@ export function CommandsTab({ commands, onChange }) {
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                <label className={labelClass}>Description</label>
+                <label className={labelClass}>描述</label>
                 <input
                   className={inputClass}
-                  placeholder="Review code changes"
+                  placeholder="审查代码变更"
                   value={editingCommand.description}
                   onChange={(e) => setEditingCommand({ ...editingCommand, description: e.target.value })}
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className={labelClass}>Argument Hint</label>
+                <label className={labelClass}>参数提示</label>
                 <input
                   className={inputClass}
                   placeholder="[pr-number] [--verbose]"
@@ -167,13 +167,13 @@ export function CommandsTab({ commands, onChange }) {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className={labelClass}>Model</label>
+                <label className={labelClass}>模型</label>
                 <select
                   className={inputClass}
                   value={editingCommand.model}
                   onChange={(e) => setEditingCommand({ ...editingCommand, model: e.target.value })}
                 >
-                  <option value="">Inherit from agent</option>
+                  <option value="">继承 Agent</option>
                   {MODELS.map((m) => (
                     <option key={m.value} value={m.value}>
                       {m.label}
@@ -183,27 +183,27 @@ export function CommandsTab({ commands, onChange }) {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <label className={labelClass}>Allowed Tools</label>
+              <label className={labelClass}>允许的工具</label>
               <input
                 className={inputClass}
                 placeholder="Read, Grep, Glob, Bash(git diff:*)"
                 value={editingCommand.allowedTools}
                 onChange={(e) => setEditingCommand({ ...editingCommand, allowedTools: e.target.value })}
               />
-              <p className="text-xs text-neutral-400">Comma-separated. Leave empty to inherit from agent.</p>
+              <p className="text-xs text-neutral-400">逗号分隔。留空则继承 Agent。</p>
             </div>
             <div className="flex flex-col gap-2">
               <label className={labelClass}>
-                Prompt Template <span className="text-red-500">*</span>
+                提示词模板 <span className="text-red-500">*</span>
               </label>
               <textarea
                 className={`${inputClass} min-h-[160px] font-mono text-xs`}
-                placeholder="Review the code changes for PR #$1&#10;&#10;Focus on:&#10;1. Security vulnerabilities&#10;2. Performance issues"
+                placeholder="审查 PR #$1 的代码变更&#10;&#10;重点关注：&#10;1. 安全漏洞&#10;2. 性能问题"
                 value={editingCommand.prompt}
                 onChange={(e) => setEditingCommand({ ...editingCommand, prompt: e.target.value })}
               />
               <p className="text-xs text-neutral-400">
-                Use $1, $2 for positional args, $ARGUMENTS for all args.
+                使用 $1、$2 表示位置参数，$ARGUMENTS 表示所有参数。
               </p>
             </div>
             <div className="flex justify-end gap-3">
@@ -215,7 +215,7 @@ export function CommandsTab({ commands, onChange }) {
                 }}
                 className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
               >
-                Cancel
+                取消
               </button>
               <button
                 type="button"
@@ -223,7 +223,7 @@ export function CommandsTab({ commands, onChange }) {
                 disabled={!editingCommand.name || !editingCommand.prompt}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300"
               >
-                Save Command
+                保存命令
               </button>
             </div>
           </div>

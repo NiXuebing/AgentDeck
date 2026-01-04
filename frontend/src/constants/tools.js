@@ -2,47 +2,47 @@
 
 export const TOOL_GROUPS = {
   file: {
-    label: 'File Operations',
+    label: '文件操作',
     tools: [
-      { name: 'Read', description: 'Read file contents', default: true },
-      { name: 'Write', description: 'Create/overwrite files', default: true },
-      { name: 'Edit', description: 'Edit file sections', default: true },
-      { name: 'Grep', description: 'Search file contents', default: true },
-      { name: 'Glob', description: 'Find files by pattern', default: true },
+      { name: 'Read', description: '读取文件内容', default: true },
+      { name: 'Write', description: '创建/覆盖文件', default: true },
+      { name: 'Edit', description: '编辑文件片段', default: true },
+      { name: 'Grep', description: '搜索文件内容', default: true },
+      { name: 'Glob', description: '按模式查找文件', default: true },
     ],
   },
   execution: {
-    label: 'Execution',
+    label: '执行',
     tools: [
-      { name: 'Bash', description: 'Execute shell commands', default: true, hasPatterns: true },
+      { name: 'Bash', description: '执行 shell 命令', default: true, hasPatterns: true },
     ],
   },
   web: {
-    label: 'Web',
+    label: '网络',
     tools: [
-      { name: 'WebSearch', description: 'Search the internet', default: true },
-      { name: 'WebFetch', description: 'Fetch URL content', default: true },
+      { name: 'WebSearch', description: '搜索互联网', default: true },
+      { name: 'WebFetch', description: '抓取 URL 内容', default: true },
     ],
   },
   task: {
-    label: 'Task Management',
+    label: '任务管理',
     tools: [
-      { name: 'TodoWrite', description: 'Manage task lists', default: true },
-      { name: 'NotebookEdit', description: 'Edit Jupyter notebooks', default: false },
+      { name: 'TodoWrite', description: '管理任务列表', default: true },
+      { name: 'NotebookEdit', description: '编辑 Jupyter notebooks', default: false },
     ],
   },
   agent: {
-    label: 'Agent Delegation',
+    label: 'Agent 委派',
     tools: [
-      { name: 'Task', description: 'Delegate to sub-agents', default: true },
-      { name: 'Skill', description: 'Invoke skills', default: true },
+      { name: 'Task', description: '委派给子 Agent', default: true },
+      { name: 'Skill', description: '调用技能', default: true },
     ],
   },
   mcp: {
     label: 'MCP',
     tools: [
-      { name: 'ListMcpResources', description: 'List MCP resources', default: false },
-      { name: 'ReadMcpResource', description: 'Read MCP resource', default: false },
+      { name: 'ListMcpResources', description: '列出 MCP 资源', default: false },
+      { name: 'ReadMcpResource', description: '读取 MCP 资源', default: false },
     ],
   },
 }
@@ -57,110 +57,110 @@ export const ALL_TOOLS = Object.values(TOOL_GROUPS)
   .map((tool) => tool.name)
 
 export const MODELS = [
-  { value: 'inherit', label: 'Inherit from parent' },
-  { value: 'sonnet', label: 'Sonnet (Balanced)' },
-  { value: 'opus', label: 'Opus (Most Capable)' },
-  { value: 'haiku', label: 'Haiku (Fast)' },
+  { value: 'inherit', label: '继承父级' },
+  { value: 'sonnet', label: 'Sonnet（均衡）' },
+  { value: 'opus', label: 'Opus（最强）' },
+  { value: 'haiku', label: 'Haiku（快速）' },
 ]
 
 export const PERMISSION_MODES = [
-  { value: 'default', label: 'Default (ask for all)' },
-  { value: 'acceptEdits', label: 'Accept Edits (auto-approve file changes)' },
-  { value: 'plan', label: 'Plan (no execution)' },
-  { value: 'bypassPermissions', label: 'Bypass Permissions (auto all)' },
+  { value: 'default', label: '默认（全部询问）' },
+  { value: 'acceptEdits', label: '接受编辑（自动批准文件变更）' },
+  { value: 'plan', label: '计划（不执行）' },
+  { value: 'bypassPermissions', label: '跳过权限（自动全部允许）' },
 ]
 
 export const SUBAGENT_TEMPLATES = [
   {
     id: 'frontend',
     icon: '🎨',
-    name: 'Frontend',
-    description: 'React, Next.js, TypeScript, CSS',
+    name: '前端',
+    description: 'React、Next.js、TypeScript、CSS',
     defaultTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'TodoWrite'],
     model: 'sonnet',
-    prompt: `You are a senior frontend engineer specializing in:
+    prompt: `你是一位资深前端工程师，擅长：
 
-- React 18+ with hooks and modern patterns
-- Next.js 14+ (App Router, Server Components)
-- TypeScript with strict mode
-- Tailwind CSS and CSS-in-JS
-- State management (Zustand, React Query)
+- React 18+（hooks 与现代模式）
+- Next.js 14+（App Router、Server Components）
+- TypeScript 严格模式
+- Tailwind CSS 与 CSS-in-JS
+- 状态管理（Zustand、React Query）
 
-Best practices:
-- Component composition over inheritance
-- Accessibility (WCAG 2.1 AA)
-- Performance optimization`,
+最佳实践：
+- 组件组合优于继承
+- 可访问性（WCAG 2.1 AA）
+- 性能优化`,
   },
   {
     id: 'backend',
     icon: '⚙️',
-    name: 'Backend',
-    description: 'Python, Node.js, APIs, Database',
+    name: '后端',
+    description: 'Python、Node.js、API、数据库',
     defaultTools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash', 'TodoWrite'],
     model: 'sonnet',
-    prompt: `You are a senior backend engineer specializing in:
+    prompt: `你是一位资深后端工程师，擅长：
 
-- Python with FastAPI, Django
-- Node.js with Express, NestJS
-- Database design (PostgreSQL, MongoDB)
-- API design (REST, GraphQL)
-- Authentication and security`,
+- Python（FastAPI、Django）
+- Node.js（Express、NestJS）
+- 数据库设计（PostgreSQL、MongoDB）
+- API 设计（REST、GraphQL）
+- 认证与安全`,
   },
   {
     id: 'devops',
     icon: '🚀',
     name: 'DevOps',
-    description: 'Docker, Kubernetes, CI/CD',
+    description: 'Docker、Kubernetes、CI/CD',
     defaultTools: ['Read', 'Write', 'Bash', 'TodoWrite'],
     model: 'haiku',
-    prompt: `You are a DevOps engineer specializing in:
+    prompt: `你是一位 DevOps 工程师，擅长：
 
-- Docker containerization
-- Kubernetes orchestration
-- CI/CD pipelines (GitHub Actions, GitLab CI)
-- Cloud platforms (AWS, GCP, Azure)
-- Infrastructure as Code (Terraform)`,
+- Docker 容器化
+- Kubernetes 编排
+- CI/CD 流水线（GitHub Actions、GitLab CI）
+- 云平台（AWS、GCP、Azure）
+- 基础设施即代码（Terraform）`,
   },
   {
     id: 'researcher',
     icon: '🔍',
-    name: 'Researcher',
-    description: 'Web research, data gathering',
+    name: '研究',
+    description: '网络调研、数据收集',
     defaultTools: ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite'],
     model: 'haiku',
-    prompt: `You are a research assistant specializing in:
+    prompt: `你是一位研究助理，擅长：
 
-- Web research and data gathering
-- Summarizing technical documentation
-- Finding relevant code examples
-- Comparing libraries and frameworks`,
+- 网络调研与数据收集
+- 技术文档总结
+- 查找相关代码示例
+- 对比库与框架`,
   },
   {
     id: 'writer',
     icon: '📝',
-    name: 'Writer',
-    description: 'Documentation, content',
+    name: '写作',
+    description: '文档、内容',
     defaultTools: ['Read', 'Write', 'Edit', 'Grep', 'TodoWrite'],
     model: 'opus',
-    prompt: `You are a technical writer specializing in:
+    prompt: `你是一位技术写作者，擅长：
 
-- Clear, concise documentation
-- API documentation
-- README files and guides
-- Code comments and JSDoc`,
+- 清晰简洁的文档
+- API 文档
+- README 与使用指南
+- 代码注释与 JSDoc`,
   },
   {
     id: 'tester',
     icon: '🧪',
-    name: 'Tester',
-    description: 'Unit tests, E2E, coverage',
+    name: '测试',
+    description: '单元测试、E2E、覆盖率',
     defaultTools: ['Read', 'Write', 'Edit', 'Bash', 'TodoWrite'],
     model: 'sonnet',
-    prompt: `You are a QA engineer specializing in:
+    prompt: `你是一位 QA 工程师，擅长：
 
-- Unit testing (Jest, Pytest, Vitest)
-- Integration testing
-- E2E testing (Playwright, Cypress)
-- Test coverage and quality`,
+- 单元测试（Jest、Pytest、Vitest）
+- 集成测试
+- E2E 测试（Playwright、Cypress）
+- 测试覆盖率与质量`,
   },
 ]
