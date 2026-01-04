@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
 
 import { SubAgentEditor } from './components/SubAgentEditor'
 import CreateView from './components/views/CreateView'
@@ -85,10 +83,6 @@ function App() {
   const [editingSubAgent, setEditingSubAgent] = useState(null)
   const [isAddingSubAgent, setIsAddingSubAgent] = useState(false)
 
-  const termRef = useRef(null)
-  const fitRef = useRef(null)
-  const terminalHostRef = useRef(null)
-  const wsRef = useRef(null)
   const messagesEndRef = useRef(null)
 
   const mcpServersParsed = useMemo(
@@ -192,69 +186,6 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, selectedAgentId])
 
-  useEffect(() => {
-    if (!terminalHostRef.current || termRef.current) return
-    const term = new Terminal({
-      fontFamily: 'IBM Plex Mono, monospace',
-      fontSize: 12,
-      theme: {
-        background: '#0b1216',
-        foreground: '#f2f2f2',
-        cursor: '#f08a4b',
-        selectionBackground: 'rgba(240, 138, 75, 0.2)',
-      },
-    })
-    const fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
-    term.open(terminalHostRef.current)
-    fitAddon.fit()
-    term.writeln('AgentDeck log stream ready. Select an agent to attach logs.')
-    termRef.current = term
-    fitRef.current = fitAddon
-
-    const handleResize = () => fitAddon.fit()
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      term.dispose()
-      termRef.current = null
-      fitRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!termRef.current) return
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
-    }
-
-    if (!selectedAgentId) {
-      termRef.current.writeln('No agent selected.')
-      return
-    }
-
-    termRef.current.writeln(`\r\n--- streaming logs for ${selectedAgentId} ---`)
-    const ws = new WebSocket(`${WS_BASE}/ws/agents/${selectedAgentId}/logs`)
-    wsRef.current = ws
-
-    ws.onmessage = (event) => {
-      termRef.current?.writeln(event.data)
-    }
-
-    ws.onerror = () => {
-      termRef.current?.writeln('[error] log stream error')
-    }
-
-    ws.onclose = () => {
-      termRef.current?.writeln('--- log stream closed ---')
-    }
-
-    return () => {
-      ws.close()
-    }
-  }, [selectedAgentId])
 
   const handleAddSubAgent = () => {
     setEditingSubAgent(null)
@@ -545,12 +476,6 @@ function App() {
     }
   }
 
-  const handleClearLogs = () => {
-    if (!termRef.current) return
-    termRef.current.clear()
-    termRef.current.writeln('Logs cleared.')
-  }
-
   return (
     <div className="min-h-screen px-6 py-8 lg:px-10">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -705,8 +630,6 @@ function App() {
               onSendMessage={handleSendMessage}
               isStreaming={isStreaming}
               messagesEndRef={messagesEndRef}
-              terminalHostRef={terminalHostRef}
-              onClearLogs={handleClearLogs}
               wsBase={WS_BASE}
             />
           )}

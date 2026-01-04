@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react'
+
 function RunView({
   selectedAgentId,
   selectedAgent,
@@ -11,10 +13,14 @@ function RunView({
   onSendMessage,
   isStreaming,
   messagesEndRef,
-  terminalHostRef,
-  onClearLogs,
   wsBase,
 }) {
+  const terminalHostRef = useRef(null)
+  const termRef = useRef(null)
+  const fitRef = useRef(null)
+  const wsRef = useRef(null)
+  const [terminalReady, setTerminalReady] = useState(false)
+
   const statusLabel = selectedAgent?.status || 'idle'
   const statusStyle =
     statusLabel === 'running'
@@ -22,6 +28,91 @@ function RunView({
       : statusLabel === 'stopped'
         ? { badge: 'status-stopped', dot: 'bg-orange-500' }
         : { badge: 'status-missing', dot: 'bg-neutral-500' }
+
+  useEffect(() => {
+    let cancelled = false
+    if (!terminalHostRef.current || termRef.current) return undefined
+
+    const initTerminal = async () => {
+      const [{ Terminal }, { FitAddon }] = await Promise.all([
+        import('@xterm/xterm'),
+        import('@xterm/addon-fit'),
+      ])
+      if (cancelled || !terminalHostRef.current) return
+
+      const term = new Terminal({
+        fontFamily: 'IBM Plex Mono, monospace',
+        fontSize: 12,
+        theme: {
+          background: '#0b1216',
+          foreground: '#f2f2f2',
+          cursor: '#f08a4b',
+          selectionBackground: 'rgba(240, 138, 75, 0.2)',
+        },
+      })
+      const fitAddon = new FitAddon()
+      term.loadAddon(fitAddon)
+      term.open(terminalHostRef.current)
+      fitAddon.fit()
+      term.writeln('AgentDeck log stream ready. Select an agent to attach logs.')
+      termRef.current = term
+      fitRef.current = fitAddon
+      setTerminalReady(true)
+
+      const handleResize = () => fitAddon.fit()
+      window.addEventListener('resize', handleResize)
+
+      return () => {
+        window.removeEventListener('resize', handleResize)
+        term.dispose()
+        termRef.current = null
+        fitRef.current = null
+      }
+    }
+
+    let cleanup
+    initTerminal().then((teardown) => {
+      cleanup = teardown
+    })
+
+    return () => {
+      cancelled = true
+      if (cleanup) cleanup()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!terminalReady || !termRef.current) return undefined
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
+    if (!selectedAgentId) {
+      termRef.current.writeln('No agent selected.')
+      return undefined
+    }
+
+    termRef.current.writeln(`\r\n--- streaming logs for ${selectedAgentId} ---`)
+    const ws = new WebSocket(`${wsBase}/ws/agents/${selectedAgentId}/logs`)
+    wsRef.current = ws
+
+    ws.onmessage = (event) => {
+      termRef.current?.writeln(event.data)
+    }
+
+    ws.onerror = () => {
+      termRef.current?.writeln('[error] log stream error')
+    }
+
+    ws.onclose = () => {
+      termRef.current?.writeln('--- log stream closed ---')
+    }
+
+    return () => {
+      ws.close()
+    }
+  }, [selectedAgentId, terminalReady, wsBase])
 
   return (
     <>
@@ -159,7 +250,11 @@ function RunView({
             <div className="flex items-center gap-2">
               <button
                 className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-black/20"
-                onClick={onClearLogs}
+                onClick={() => {
+                  if (!termRef.current) return
+                  termRef.current.clear()
+                  termRef.current.writeln('Logs cleared.')
+                }}
               >
                 Clear
               </button>
