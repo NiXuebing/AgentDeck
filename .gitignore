@@ -19,3 +19,6 @@ backend/.env
 
 # Upstream clone
 agcluster-source/
+
+# Git worktrees
+.worktrees/
