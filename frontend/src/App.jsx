@@ -459,6 +459,7 @@ function App() {
       }))
       await fetchAgents()
       setSelectedAgentId(created.agent_id)
+      setActiveView('run')
     } catch (error) {
       setErrorMessage(error.message)
     } finally {
@@ -697,6 +698,7 @@ function App() {
               isAgentRunning={isAgentRunning}
               onStopAgent={handleStop}
               onStartAgent={handleStart}
+              onConfigure={() => setActiveView('create')}
               messages={messages}
               messageInput={messageInput}
               onMessageInput={setMessageInput}

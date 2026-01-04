@@ -4,6 +4,7 @@ function RunView({
   isAgentRunning,
   onStopAgent,
   onStartAgent,
+  onConfigure,
   messages,
   messageInput,
   onMessageInput,
@@ -32,9 +33,17 @@ function RunView({
               Monitor the live agent and jump back to configuration when needed.
             </p>
           </div>
-          <span className={`badge ${statusStyle.badge}`}>
-            <span className={`badge-dot ${statusStyle.dot}`} /> {statusLabel}
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-black/20"
+              onClick={onConfigure}
+            >
+              Configure
+            </button>
+            <span className={`badge ${statusStyle.badge}`}>
+              <span className={`badge-dot ${statusStyle.dot}`} /> {statusLabel}
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm text-neutral-600">
           <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1">

@@ -18,3 +18,13 @@ window.matchMedia =
   }))
 
 HTMLCanvasElement.prototype.getContext = () => ({})
+
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = class WebSocket {
+    constructor() {
+      this.readyState = 1
+    }
+    close() {}
+    send() {}
+  }
+}
