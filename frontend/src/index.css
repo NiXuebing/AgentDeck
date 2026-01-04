@@ -4,6 +4,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Visual regression placeholder test plan (enable after test tooling is added).
+   - Create view uses surface/text/accent tokens for panels and buttons.
+   - Run view uses surface panels with readable primary/secondary text. */
 :root {
   --bg: #f6f1e6;
   --bg-2: #e7f1f4;
@@ -16,6 +19,14 @@
   --card-strong: rgba(255, 255, 255, 0.92);
   --stroke: rgba(27, 27, 27, 0.12);
   --shadow: 0 24px 60px rgba(16, 24, 32, 0.12);
+  --surface-base: #f7f3ec;
+  --surface-panel: #eee7dd;
+  --surface-raised: #ffffff;
+  --text-primary: #2b2a29;
+  --text-secondary: #6b645c;
+  --accent-primary: #2e3a4a;
+  --accent-hover: #394859;
+  --border-subtle: #d8cfc2;
 }
 
 * {
