@@ -2,13 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 
-import { ProfileTab } from './components/tabs/ProfileTab'
-import { ToolboxTab } from './components/tabs/ToolboxTab'
-import { SkillsTab } from './components/tabs/SkillsTab'
-import { CommandsTab } from './components/tabs/CommandsTab'
-import { SubAgentCard } from './components/SubAgentCard'
 import { SubAgentEditor } from './components/SubAgentEditor'
-import { PreviewPanel } from './components/PreviewPanel'
+import CreateView from './components/views/CreateView'
+import RunView from './components/views/RunView'
 import { DEFAULT_TOOLS } from './constants/tools'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
@@ -17,9 +13,6 @@ const WS_BASE = API_BASE
   : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
 
 const SESSION_STORE_KEY = 'agentdeck.sessions'
-
-const inputClass =
-  'w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-2 text-sm text-neutral-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/40'
 
 const parseList = (value) =>
   value
@@ -88,6 +81,7 @@ function App() {
   const [skills, setSkills] = useState({})
   const [commands, setCommands] = useState({})
   const [activeConfigTab, setActiveConfigTab] = useState('profile')
+  const [activeView, setActiveView] = useState('create')
   const [editingSubAgent, setEditingSubAgent] = useState(null)
   const [isAddingSubAgent, setIsAddingSubAgent] = useState(false)
 
@@ -139,6 +133,7 @@ function App() {
 
     return JSON.stringify(config, null, 2)
   }, [form, mcpServersParsed.data, subAgents, skills, commands])
+  const previewConfig = useMemo(() => JSON.parse(configPreview), [configPreview])
 
   const messages = useMemo(
     () => (selectedAgentId ? chatByAgent[selectedAgentId] || [] : []),
@@ -675,232 +670,57 @@ function App() {
             </div>
           </aside>
 
-          <section className="glass reveal flex flex-col gap-5 p-6" style={{ '--delay': '140ms' }}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="section-title">Agent Configuration</h2>
-                <p className="mt-2 text-sm text-neutral-500">
-                  Configure tools, sub-agents, skills, and slash commands for your agent.
-                </p>
-              </div>
-              <button
-                className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
-                onClick={handleLaunch}
-                disabled={launching}
-              >
-                {launching ? 'Launching...' : 'Launch Agent'}
-              </button>
-            </div>
-
-            {/* Config Tabs */}
-            <div className="flex border-b border-black/10">
-              {[
-                { id: 'profile', label: 'Profile' },
-                { id: 'toolbox', label: 'Toolbox' },
-                { id: 'agents', label: `Sub-Agents (${Object.keys(subAgents).length})` },
-                { id: 'skills', label: `Skills (${Object.keys(skills).length})` },
-                { id: 'commands', label: `Commands (${Object.keys(commands).length})` },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveConfigTab(tab.id)}
-                  className={`px-4 py-2.5 text-sm font-medium transition ${
-                    activeConfigTab === tab.id
-                      ? 'border-b-2 border-emerald-500 text-emerald-700'
-                      : 'text-neutral-500 hover:text-neutral-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Content */}
-            <div className="min-h-[400px]">
-              {activeConfigTab === 'profile' && (
-                <ProfileTab form={form} onChange={setForm} />
-              )}
-
-              {activeConfigTab === 'toolbox' && (
-                <ToolboxTab
-                  form={form}
-                  onChange={setForm}
-                  mcpServers={mcpServersJson}
-                  onMcpServersChange={setMcpServersJson}
-                />
-              )}
-
-              {activeConfigTab === 'agents' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-neutral-500">
-                      Sub-agents are invoked via the Task tool based on their descriptions.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleAddSubAgent}
-                      className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-                    >
-                      + Add Sub-Agent
-                    </button>
-                  </div>
-                  {Object.keys(subAgents).length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-black/10 bg-white/50 p-8 text-center">
-                      <p className="text-sm text-neutral-500">No sub-agents defined yet.</p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {Object.entries(subAgents).map(([name, agent]) => (
-                        <SubAgentCard
-                          key={name}
-                          name={name}
-                          agent={agent}
-                          onEdit={handleEditSubAgent}
-                          onDelete={handleDeleteSubAgent}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeConfigTab === 'skills' && (
-                <SkillsTab skills={skills} onChange={setSkills} />
-              )}
-
-              {activeConfigTab === 'commands' && (
-                <CommandsTab commands={commands} onChange={setCommands} />
-              )}
-            </div>
-
-            {/* Preview Panel */}
-            <div className="h-[300px]">
-              <PreviewPanel
-                config={JSON.parse(configPreview)}
-                agents={subAgents}
-                skills={skills}
-                commands={commands}
-              />
-            </div>
-          </section>
-
-          {/* Sub-Agent Editor Modal */}
-          {(editingSubAgent || isAddingSubAgent) && (
-            <SubAgentEditor
-              agent={editingSubAgent}
-              isNew={isAddingSubAgent}
-              onSave={handleSaveSubAgent}
-              onCancel={() => {
-                setEditingSubAgent(null)
-                setIsAddingSubAgent(false)
-              }}
+          {activeView === 'create' ? (
+            <CreateView
+              launching={launching}
+              onLaunch={handleLaunch}
+              activeConfigTab={activeConfigTab}
+              onChangeConfigTab={setActiveConfigTab}
+              form={form}
+              onChangeForm={setForm}
+              mcpServersJson={mcpServersJson}
+              onMcpServersChange={setMcpServersJson}
+              subAgents={subAgents}
+              onAddSubAgent={handleAddSubAgent}
+              onEditSubAgent={handleEditSubAgent}
+              onDeleteSubAgent={handleDeleteSubAgent}
+              skills={skills}
+              onChangeSkills={setSkills}
+              commands={commands}
+              onChangeCommands={setCommands}
+              previewConfig={previewConfig}
+            />
+          ) : (
+            <RunView
+              selectedAgentId={selectedAgentId}
+              selectedAgent={selectedAgent}
+              isAgentRunning={isAgentRunning}
+              onStopAgent={handleStop}
+              onStartAgent={handleStart}
+              messages={messages}
+              messageInput={messageInput}
+              onMessageInput={setMessageInput}
+              onSendMessage={handleSendMessage}
+              isStreaming={isStreaming}
+              messagesEndRef={messagesEndRef}
+              terminalHostRef={terminalHostRef}
+              onClearLogs={handleClearLogs}
+              wsBase={WS_BASE}
             />
           )}
-
-          <div className="flex flex-col gap-6">
-            <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '200ms' }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="section-title">Conversation</h2>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    Send a prompt to the selected agent and watch the stream.
-                  </p>
-                </div>
-                <span className="badge status-running">
-                  <span className="badge-dot bg-emerald-600" /> {selectedAgentId || 'no agent'}
-                </span>
-              </div>
-              <div className="glass-strong flex h-[260px] flex-col gap-3 overflow-y-auto p-4">
-                {messages.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-4 py-6 text-sm text-neutral-500">
-                    Select an agent and send a message to start chatting.
-                  </div>
-                ) : (
-                  messages.map((message, index) => {
-                    const isUser = message.role === 'user'
-                    return (
-                      <div
-                        key={`${message.role}-${index}`}
-                        className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                            isUser
-                              ? 'bg-neutral-900 text-white'
-                              : 'border border-black/5 bg-white/90 text-neutral-900'
-                          }`}
-                        >
-                          <p className="whitespace-pre-wrap">{message.content || '...'}</p>
-                          {message.streaming ? (
-                            <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-neutral-400">
-                              streaming
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-              <div className="flex items-center gap-3">
-                <textarea
-                  className={`${inputClass} min-h-[48px]`}
-                  placeholder={
-                    selectedAgentId
-                      ? isAgentRunning
-                        ? 'Ask the agent something...'
-                        : 'Start the agent to begin chatting.'
-                      : 'Select an agent to start chatting.'
-                  }
-                  value={messageInput}
-                  onChange={(event) => setMessageInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault()
-                      handleSendMessage()
-                    }
-                  }}
-                  disabled={!selectedAgentId || !isAgentRunning || isStreaming}
-                />
-                <button
-                  className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
-                  onClick={handleSendMessage}
-                  disabled={!selectedAgentId || !isAgentRunning || isStreaming || !messageInput.trim()}
-                >
-                  {isStreaming ? 'Sending...' : 'Send'}
-                </button>
-              </div>
-            </section>
-
-            <section className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '240ms' }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="section-title">Live Logs</h2>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    WebSocket stream from the container runtime.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-black/20"
-                    onClick={handleClearLogs}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 rounded-2xl bg-[#0b1216] p-3">
-                <div ref={terminalHostRef} className="h-[220px] w-full sm:h-[260px] lg:h-[300px]" />
-              </div>
-              <div className="flex items-center justify-between rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-neutral-500">
-                <span>Streaming: {selectedAgentId || 'none'}</span>
-                <span>{WS_BASE.replace(/^wss?:\/\//, '')}</span>
-              </div>
-            </section>
-          </div>
         </main>
+
+        {activeView === 'create' && (editingSubAgent || isAddingSubAgent) && (
+          <SubAgentEditor
+            agent={editingSubAgent}
+            isNew={isAddingSubAgent}
+            onSave={handleSaveSubAgent}
+            onCancel={() => {
+              setEditingSubAgent(null)
+              setIsAddingSubAgent(false)
+            }}
+          />
+        )}
       </div>
     </div>
   )
