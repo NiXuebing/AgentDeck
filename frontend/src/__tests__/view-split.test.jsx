@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act } from 'react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import App from '../App'
 
@@ -26,6 +27,13 @@ const mockFetch = () =>
     })
   })
 
+const renderApp = async () => {
+  await act(async () => {
+    render(<App />)
+    await Promise.resolve()
+  })
+}
+
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch())
 })
@@ -34,19 +42,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('renders quick create entry', () => {
-  render(<App />)
-  expect(screen.getByText(/Launch Agent/i)).toBeInTheDocument()
+test('renders quick create entry', async () => {
+  await renderApp()
+  await waitFor(() => {
+    expect(screen.getByText(/Launch Agent/i)).toBeInTheDocument()
+  })
 })
 
-test('create view shows quick create card and wizard entry', () => {
-  render(<App />)
+test('create view shows quick create card and wizard entry', async () => {
+  await renderApp()
   expect(screen.getByText(/快速创建/i)).toBeInTheDocument()
   expect(screen.getByText(/向导创建/i)).toBeInTheDocument()
 })
 
 test('switches to run view after create', async () => {
-  render(<App />)
+  await renderApp()
   const createButton = await screen.findByRole('button', { name: /创建并启动/i })
   fireEvent.click(createButton)
   expect(await screen.findByText(/Conversation/i)).toBeInTheDocument()
