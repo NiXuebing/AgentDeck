@@ -170,7 +170,101 @@ Step 4: 复核与启动
 
 ---
 
-## 9. 交互与状态
+## 9. UI 规格表（设计系统命名 + CSS 映射）
+
+### 9.1 颜色 Tokens
+**Design Tokens**
+- surface/base: #F7F3EC
+- surface/panel: #EEE7DD
+- surface/raised: #FFFFFF
+- text/primary: #2B2A29
+- text/secondary: #6B645C
+- text/tertiary: #8C857E
+- accent/primary: #2E3A4A
+- accent/hover: #394859
+- success: #8BAA9B
+- warning: #C57966
+- border/subtle: #D8CFC2
+
+**CSS Variables**
+```css
+:root {
+  --surface-base: #F7F3EC;
+  --surface-panel: #EEE7DD;
+  --surface-raised: #FFFFFF;
+  --text-primary: #2B2A29;
+  --text-secondary: #6B645C;
+  --text-tertiary: #8C857E;
+  --accent-primary: #2E3A4A;
+  --accent-hover: #394859;
+  --success: #8BAA9B;
+  --warning: #C57966;
+  --border-subtle: #D8CFC2;
+}
+```
+
+### 9.2 Typography Tokens
+**Design Tokens**
+- font/title: 24-32px, 600
+- font/section: 18-20px, 600
+- font/body: 14-16px, 400-500
+- font/meta: 12-13px, 400
+
+**CSS Variables**
+```css
+:root {
+  --font-title-size: 28px;
+  --font-title-weight: 600;
+  --font-section-size: 18px;
+  --font-section-weight: 600;
+  --font-body-size: 15px;
+  --font-body-weight: 400;
+  --font-meta-size: 12px;
+  --font-meta-weight: 400;
+}
+```
+
+### 9.3 Spacing + Radius
+**Design Tokens**
+- space/2: 8px
+- space/3: 12px
+- space/4: 16px
+- space/6: 24px
+- space/8: 32px
+- radius/card: 12px
+- radius/input: 10px
+
+**CSS Variables**
+```css
+:root {
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-card: 12px;
+  --radius-input: 10px;
+}
+```
+
+### 9.4 Component States
+**Buttons**
+- Primary: background `accent/primary`, text `surface/raised`, hover `accent/hover`
+- Secondary: border `border/subtle`, text `text/primary`, hover `surface/panel`
+
+**Inputs**
+- Default: background `surface/raised`, border `border/subtle`
+- Focus: border `accent/primary`, shadow subtle
+- Error: border `warning`, helper text `warning`
+
+**Cards**
+- Default: background `surface/panel`, border `border/subtle`
+- Active: border `accent/primary`, shadow light
+- Disabled: opacity 0.6
+
+---
+
+## 10. 交互与状态
 
 - Create View 中不展示对话与日志，避免分心。
 - 只有在 Agent 已启动时才允许对话输入。
@@ -179,7 +273,7 @@ Step 4: 复核与启动
 
 ---
 
-## 10. 成功指标
+## 11. 成功指标
 
 - 创建完成时间下降（目标：-40%）
 - 创建放弃率下降（目标：-30%）
@@ -187,7 +281,7 @@ Step 4: 复核与启动
 
 ---
 
-## 11. 风险与缓解
+## 12. 风险与缓解
 
 - 风险：用户错过高级配置，导致运行异常
   - 缓解：运行前复核页提示“高级配置未设置”
@@ -196,14 +290,14 @@ Step 4: 复核与启动
 
 ---
 
-## 12. 后续落地建议
+## 13. 后续落地建议
 
 - 先改信息架构与流程，后改视觉语言。
 - 保留当前配置结构，先做折叠/分层。
 - 在 Run View 增加“Configure”入口保持可达性。
 
 ---
-## 13. 组件清单与优先级
+## 14. 组件清单与优先级
 
 ### 11.1 创建视图组件（P0 必做）
 - Create Agent 入口按钮（主导航右侧）
