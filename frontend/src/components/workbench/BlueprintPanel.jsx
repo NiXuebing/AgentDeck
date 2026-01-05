@@ -7,6 +7,7 @@ import { SubAgentCard } from '../SubAgentCard'
 export function BlueprintPanel({
   form,
   onChangeForm,
+  showSkeleton,
   activeTab,
   onChangeTab,
   subAgents,
@@ -26,6 +27,17 @@ export function BlueprintPanel({
   canRollback,
   onRollback,
 }) {
+  if (showSkeleton) {
+    return (
+      <div
+        className="rounded-2xl border border-dashed border-black/10 bg-white/60 px-6 py-8 text-sm text-neutral-500"
+        data-testid="blueprint-skeleton"
+      >
+        Blueprint loading...
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <header className="flex items-center justify-between">

@@ -10,6 +10,7 @@ export const WORKBENCH_STATES = {
 export function useWorkbenchController({
   apiBase,
   onHydrateConfig,
+  onGenesisFill,
   onLaunch,
   configPreview,
   selectedAgentId,
@@ -56,7 +57,11 @@ export function useWorkbenchController({
       }
 
       const { config } = await response.json()
-      onHydrateConfig?.(config)
+      if (onGenesisFill) {
+        await onGenesisFill(config)
+      } else {
+        onHydrateConfig?.(config)
+      }
       await onLaunch?.()
       setState(WORKBENCH_STATES.RUNNING)
     } catch (error) {

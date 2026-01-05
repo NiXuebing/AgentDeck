@@ -7,6 +7,8 @@ import { StagePanel } from './components/workbench/StagePanel'
 import { DEFAULT_TOOLS } from './constants/tools'
 import { WorkbenchContext } from './context/WorkbenchContext'
 import { WORKBENCH_STATES, useWorkbenchController } from './hooks/useWorkbenchController'
+import { useGenesisFill } from './hooks/useGenesisFill'
+import { buildGenesisSteps } from './utils/genesisSteps'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const WS_BASE = API_BASE
@@ -87,6 +89,7 @@ function App() {
   const [editingSubAgent, setEditingSubAgent] = useState(null)
   const [isAddingSubAgent, setIsAddingSubAgent] = useState(false)
   const hasDraftChanges = true
+  const [hasGenesisDraft, setHasGenesisDraft] = useState(false)
 
   const messagesEndRef = useRef(null)
 
@@ -162,6 +165,11 @@ function App() {
       setCommands(config.commands)
     }
   }
+
+  const genesisFill = useGenesisFill((fragment) => {
+    setHasGenesisDraft(true)
+    hydrateFormFromConfig(fragment)
+  })
 
   const messages = useMemo(
     () => (selectedAgentId ? chatByAgent[selectedAgentId] || [] : []),
@@ -460,6 +468,10 @@ function App() {
   const workbenchController = useWorkbenchController({
     apiBase: API_BASE,
     onHydrateConfig: hydrateFormFromConfig,
+    onGenesisFill: (config) => {
+      setHasGenesisDraft(true)
+      return genesisFill.schedule(buildGenesisSteps(config))
+    },
     onLaunch: handleLaunch,
     configPreview,
     selectedAgentId,
@@ -687,6 +699,7 @@ function App() {
               <BlueprintPanel
                 form={form}
                 onChangeForm={setForm}
+                showSkeleton={!selectedAgentId && !hasGenesisDraft}
                 activeTab={activeConfigTab}
                 onChangeTab={setActiveConfigTab}
                 subAgents={subAgents}
