@@ -136,6 +136,10 @@ function App() {
     return JSON.stringify(config, null, 2)
   }, [form, mcpServersParsed.data, subAgents, skills, commands])
   const previewConfig = useMemo(() => JSON.parse(configPreview), [configPreview])
+  const toolsList = useMemo(
+    () => (Array.isArray(form.allowedTools) ? form.allowedTools : parseList(form.allowedTools || '')),
+    [form.allowedTools]
+  )
 
   const hydrateFormFromConfig = (config) => {
     if (!config) return
@@ -700,9 +704,12 @@ function App() {
                 form={form}
                 onChangeForm={setForm}
                 showSkeleton={!selectedAgentId && !hasGenesisDraft}
+                tools={toolsList}
+                onChangeTools={(nextTools) => setForm((prev) => ({ ...prev, allowedTools: nextTools }))}
                 activeTab={activeConfigTab}
                 onChangeTab={setActiveConfigTab}
                 subAgents={subAgents}
+                onChangeSubAgents={setSubAgents}
                 skills={skills}
                 commands={commands}
                 onAddSubAgent={handleAddSubAgent}

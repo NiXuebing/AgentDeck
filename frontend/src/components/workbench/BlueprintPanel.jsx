@@ -6,14 +6,18 @@ import { ToolboxTab } from '../tabs/ToolboxTab'
 import { SkillsTab } from '../tabs/SkillsTab'
 import { CommandsTab } from '../tabs/CommandsTab'
 import { SubAgentCard } from '../SubAgentCard'
+import { SkillsRack } from './SkillsRack'
 
 export function BlueprintPanel({
   form,
   onChangeForm,
   showSkeleton,
+  tools,
+  onChangeTools,
   activeTab,
   onChangeTab,
   subAgents,
+  onChangeSubAgents,
   skills,
   commands,
   onAddSubAgent,
@@ -113,6 +117,17 @@ export function BlueprintPanel({
           />
         </div>
       </div>
+
+      <SkillsRack
+        tools={tools}
+        onChangeTools={onChangeTools}
+        subAgents={subAgents}
+        onChangeSubAgents={onChangeSubAgents}
+        skills={skills}
+        onChangeSkills={onChangeSkills}
+        commands={commands}
+        onChangeCommands={onChangeCommands}
+      />
 
       <div className="rounded-2xl border border-black/10 bg-white/80 px-4 py-3">
         <div className="flex border-b border-black/10">
