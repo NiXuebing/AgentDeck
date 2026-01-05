@@ -1,3 +1,6 @@
+import { useEffect, useRef } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { ProfileTab } from '../tabs/ProfileTab'
 import { ToolboxTab } from '../tabs/ToolboxTab'
 import { SkillsTab } from '../tabs/SkillsTab'
@@ -27,6 +30,14 @@ export function BlueprintPanel({
   canRollback,
   onRollback,
 }) {
+  const promptRef = useRef(null)
+
+  useEffect(() => {
+    if (!promptRef.current) return
+    promptRef.current.style.height = 'auto'
+    promptRef.current.style.height = `${promptRef.current.scrollHeight}px`
+  }, [form.systemPrompt])
+
   if (showSkeleton) {
     return (
       <div
@@ -76,17 +87,31 @@ export function BlueprintPanel({
           <label className="text-xs font-semibold uppercase tracking-[0.15em] text-neutral-500" htmlFor="systemPrompt">
             System Prompt
           </label>
-          {hasDraftChanges ? <span className="text-xs text-amber-600">Unsaved</span> : null}
+          {hasDraftChanges ? (
+            <span
+              className="h-2 w-2 rounded-full bg-amber-500"
+              data-testid="unsaved-dot"
+              title="Unsaved"
+            />
+          ) : null}
         </div>
-        <textarea
-          id="systemPrompt"
-          className="min-h-[160px] w-full rounded-xl border border-black/10 bg-white/80 px-4 py-2.5 text-xs text-neutral-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-          placeholder="You are a senior tech editor..."
-          value={form.systemPrompt}
-          onChange={(event) =>
-            onChangeForm({ ...form, systemPrompt: event.target.value, useCustomPrompt: true })
-          }
-        />
+        <div className="relative">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl border border-black/5 bg-white/40 px-4 py-2.5 text-xs text-neutral-400">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {form.systemPrompt || ' '}
+            </ReactMarkdown>
+          </div>
+          <textarea
+            id="systemPrompt"
+            ref={promptRef}
+            className="relative z-10 min-h-[160px] w-full resize-none rounded-xl border border-black/10 bg-transparent px-4 py-2.5 text-xs text-neutral-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            placeholder="You are a senior tech editor..."
+            value={form.systemPrompt}
+            onChange={(event) =>
+              onChangeForm({ ...form, systemPrompt: event.target.value, useCustomPrompt: true })
+            }
+          />
+        </div>
       </div>
 
       <div className="rounded-2xl border border-black/10 bg-white/80 px-4 py-3">

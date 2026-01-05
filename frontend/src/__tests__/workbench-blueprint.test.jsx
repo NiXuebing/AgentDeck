@@ -1,8 +1,38 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { afterEach, vi } from 'vitest'
 import App from '../App'
 
-it('shows prompt editor with unsaved indicator', () => {
+const createResponse = ({ ok = true, json }) => ({
+  ok,
+  json: json || (async () => ({})),
+})
+
+const asUrl = (value) => {
+  if (typeof value === 'string') return value
+  if (value?.url) return value.url
+  return value?.toString?.() || ''
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+it('shows prompt editor with unsaved indicator', async () => {
+  const fetchMock = vi.fn((url) => {
+    const urlString = asUrl(url)
+    if (urlString.includes('/api/agents')) {
+      return Promise.resolve(
+        createResponse({
+          json: async () => [{ agent_id: 'agent-1', status: 'running', session_id: 's1' }],
+        })
+      )
+    }
+    return Promise.resolve(createResponse({}))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
   render(<App />)
-  expect(screen.getByLabelText(/System Prompt/i)).toBeInTheDocument()
-  expect(screen.getByText(/Unsaved/i)).toBeInTheDocument()
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  expect(await screen.findByLabelText(/System Prompt/i)).toBeInTheDocument()
+  expect(screen.getByTestId('unsaved-dot')).toBeInTheDocument()
 })
