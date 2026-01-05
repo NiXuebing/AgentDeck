@@ -1,3 +1,6 @@
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
 export function ChatMessage({ message }) {
   const role = message?.role || 'assistant'
 
@@ -12,7 +15,7 @@ export function ChatMessage({ message }) {
   const isUser = role === 'user'
   return (
     <div className={`chat-bubble ${isUser ? 'chat-user' : 'chat-agent'}`}>
-      {message.content}
+      {isUser ? message.content : <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>}
     </div>
   )
 }
