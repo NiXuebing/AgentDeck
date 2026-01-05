@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_TOOLS, TOOL_LABELS } from '../../constants/tools'
 import { CommandPalette } from './CommandPalette'
 
@@ -32,6 +32,8 @@ export function SkillsRack({
   onChangeCommands,
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [highlightTool, setHighlightTool] = useState(null)
+  const prevToolsRef = useRef(tools)
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -43,6 +45,20 @@ export function SkillsRack({
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  useEffect(() => {
+    const prevTools = prevToolsRef.current
+    if (tools.length > prevTools.length) {
+      const newTool = tools.find((tool) => !prevTools.includes(tool))
+      if (newTool) {
+        setHighlightTool(newTool)
+        const timer = setTimeout(() => setHighlightTool(null), 800)
+        return () => clearTimeout(timer)
+      }
+    }
+    prevToolsRef.current = tools
+    return undefined
+  }, [tools])
 
   const availableTools = useMemo(() => {
     const current = new Set(tools)
@@ -69,7 +85,9 @@ export function SkillsRack({
         <button
           key={item}
           type="button"
-          className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-neutral-700"
+          className={`rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-neutral-700 ${
+            highlightTool === item ? 'tool-fly-in' : ''
+          }`}
           draggable
           onDragStart={(event) => onDragStart(event, item, index)}
           onDragOver={(event) => event.preventDefault()}

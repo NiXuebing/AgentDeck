@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { TOOL_LABELS } from '../../constants/tools'
 
-export function ChatMessage({ message, onAddSuggestedTools }) {
+export function ChatMessage({ message, onAddSuggestedTools, onRetry }) {
   const role = message?.role || 'assistant'
 
   if (role === 'system' || role === 'meta') {
@@ -42,9 +42,19 @@ export function ChatMessage({ message, onAddSuggestedTools }) {
   }
 
   const isUser = role === 'user'
+  const showRetry = role === 'assistant' && !message.streaming
   return (
     <div className={`chat-bubble ${isUser ? 'chat-user' : 'chat-agent'}`}>
       {isUser ? message.content : <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>}
+      {showRetry && message.replyTo ? (
+        <button
+          type="button"
+          className="mt-2 rounded-full border border-black/10 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-600"
+          onClick={() => onRetry?.(message.replyTo)}
+        >
+          Retry
+        </button>
+      ) : null}
     </div>
   )
 }

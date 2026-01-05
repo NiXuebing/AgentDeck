@@ -92,6 +92,9 @@ function App() {
   const [hasGenesisDraft, setHasGenesisDraft] = useState(false)
 
   const messagesEndRef = useRef(null)
+  const messageIdRef = useRef(0)
+  const userMessageMapRef = useRef({})
+  const lastUserMessageRef = useRef({})
 
   const mcpServersParsed = useMemo(
     () => parseJsonField(mcpServersJson),
@@ -270,6 +273,14 @@ function App() {
     })
   }
 
+  const nextMessageId = () => `m-${messageIdRef.current++}`
+
+  const recordUserMessage = (agentId, id, content) => {
+    const current = userMessageMapRef.current[agentId] || {}
+    userMessageMapRef.current[agentId] = { ...current, [id]: content }
+    lastUserMessageRef.current[agentId] = { id, content }
+  }
+
   const finalizeAssistant = (agentId) => {
     updateMessages(agentId, (current) => {
       if (!current.length) return current
@@ -282,7 +293,7 @@ function App() {
     })
   }
 
-  const streamChat = async (agentId, sessionId, sessionToken, messages) => {
+  const streamChat = async (agentId, sessionId, sessionToken, messages, assistantMessageId, replyTo) => {
     const headers = { 'Content-Type': 'application/json' }
     if (sessionToken) {
       headers['X-Session-Token'] = sessionToken
@@ -331,7 +342,13 @@ function App() {
               const next = current.slice()
               const last = next[next.length - 1]
               if (!last || last.role !== 'assistant') {
-                next.push({ role: 'assistant', content: chunk, streaming: true })
+                next.push({
+                  id: assistantMessageId || nextMessageId(),
+                  role: 'assistant',
+                  content: chunk,
+                  streaming: true,
+                  replyTo,
+                })
                 return next
               }
               next[next.length - 1] = {
@@ -356,7 +373,7 @@ function App() {
     return assistantText
   }
 
-  const handleSendMessage = async () => {
+  const sendUserMessage = async (query) => {
     if (!selectedAgentId) {
       setErrorMessage('发送消息前请先选择一个 Agent。')
       return
@@ -370,10 +387,11 @@ function App() {
       setErrorMessage('所选 Agent 缺少 session token。请重新启动以创建。')
       return
     }
-    if (!messageInput.trim()) return
+    if (!query.trim()) return
     if (isStreaming) return
 
-    const query = messageInput.trim()
+    const userMessageId = nextMessageId()
+    const assistantMessageId = nextMessageId()
     const history = (chatByAgent[selectedAgentId] || [])
       .filter((message) => (message.role === 'user' || message.role === 'assistant') && !message.streaming)
       .map((message) => ({ role: message.role, content: message.content }))
@@ -384,16 +402,19 @@ function App() {
 
     updateMessages(selectedAgentId, (current) => [
       ...current,
-      { role: 'user', content: query },
-      { role: 'assistant', content: '', streaming: true },
+      { id: userMessageId, role: 'user', content: query },
+      { id: assistantMessageId, role: 'assistant', content: '', streaming: true, replyTo: userMessageId },
     ])
+    recordUserMessage(selectedAgentId, userMessageId, query)
 
     try {
       const assistantText = await streamChat(
         selectedAgentId,
         session.sessionId,
         session.sessionToken,
-        outgoingMessages
+        outgoingMessages,
+        assistantMessageId,
+        userMessageId
       )
       if (assistantText) {
         await workbenchController.requestToolSuggestion({ userText: query, assistantText })
@@ -401,12 +422,25 @@ function App() {
     } catch (error) {
       updateMessages(selectedAgentId, (current) => [
         ...current,
-        { role: 'assistant', content: `[错误] ${error.message}` },
+        { id: nextMessageId(), role: 'assistant', content: `[错误] ${error.message}` },
       ])
     } finally {
       finalizeAssistant(selectedAgentId)
       setIsStreaming(false)
     }
+  }
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim()) return
+    await sendUserMessage(messageInput.trim())
+  }
+
+  const handleRetryMessage = async (messageId) => {
+    if (!selectedAgentId) return
+    const map = userMessageMapRef.current[selectedAgentId] || {}
+    const content = map[messageId] || lastUserMessageRef.current[selectedAgentId]?.content
+    if (!content) return
+    await sendUserMessage(content)
   }
 
   const handleAddSuggestedTools = async (tools) => {
@@ -419,6 +453,17 @@ function App() {
     const nextConfig = { ...previewConfig, allowed_tools: nextAllowed }
     await workbenchController.handleApplyConfig(nextConfig)
     workbenchController.clearToolSuggestion()
+    if (selectedAgentId) {
+      updateMessages(selectedAgentId, (current) => [
+        ...current,
+        { role: 'meta', content: 'Tool Added' },
+        { role: 'meta', content: 'Restarted' },
+      ])
+    }
+    const last = lastUserMessageRef.current[selectedAgentId]
+    if (last?.content) {
+      await sendUserMessage(last.content)
+    }
   }
 
   const handleLaunch = async () => {
@@ -765,8 +810,8 @@ function App() {
                 architectApiKey={workbenchController.architectApiKey}
                 onArchitectApiKey={workbenchController.setArchitectApiKey}
                 architectError={workbenchController.architectError}
-                toolSuggestion={workbenchController.toolSuggestion}
                 onAddSuggestedTools={handleAddSuggestedTools}
+                onRetry={handleRetryMessage}
               />
             )}
           />

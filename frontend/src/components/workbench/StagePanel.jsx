@@ -17,8 +17,8 @@ export function StagePanel({
   architectApiKey,
   onArchitectApiKey,
   architectError,
-  toolSuggestion,
   onAddSuggestedTools,
+  onRetry,
 }) {
   return (
     <div className="flex h-full flex-col gap-4">
@@ -91,6 +91,7 @@ export function StagePanel({
               key={`${message.role}-${index}`}
               message={message}
               onAddSuggestedTools={onAddSuggestedTools}
+              onRetry={onRetry}
             />
           ))
         ) : (
