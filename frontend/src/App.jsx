@@ -92,6 +92,7 @@ function App() {
   const [hasGenesisDraft, setHasGenesisDraft] = useState(false)
 
   const messagesEndRef = useRef(null)
+  const promptInputRef = useRef(null)
   const messageIdRef = useRef(0)
   const userMessageMapRef = useRef({})
   const lastUserMessageRef = useRef({})
@@ -431,8 +432,34 @@ function App() {
   }
 
   const handleSendMessage = async () => {
-    if (!messageInput.trim()) return
-    await sendUserMessage(messageInput.trim())
+    const trimmed = messageInput.trim()
+    if (!trimmed) return
+
+    if (trimmed.startsWith('/config')) {
+      setMessageInput('')
+      updateMessages(selectedAgentId || 'global', (current) => [
+        ...current,
+        { role: 'meta', content: 'Blueprint focused' },
+      ])
+      promptInputRef.current?.focus()
+      return
+    }
+
+    if (trimmed.startsWith('/restart')) {
+      setMessageInput('')
+      if (!selectedAgentId) {
+        setErrorMessage('发送消息前请先选择一个 Agent。')
+        return
+      }
+      updateMessages(selectedAgentId, (current) => [
+        ...current,
+        { role: 'meta', content: 'Restart requested' },
+      ])
+      await workbenchController.handleApplyConfig()
+      return
+    }
+
+    await sendUserMessage(trimmed)
   }
 
   const handleRetryMessage = async (messageId) => {
@@ -767,6 +794,7 @@ function App() {
                 form={form}
                 onChangeForm={setForm}
                 showSkeleton={!selectedAgentId && !hasGenesisDraft}
+                promptRef={promptInputRef}
                 tools={toolsList}
                 onChangeTools={(nextTools) => setForm((prev) => ({ ...prev, allowedTools: nextTools }))}
                 activeTab={activeConfigTab}

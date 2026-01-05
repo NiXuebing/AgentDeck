@@ -14,6 +14,7 @@ export function BlueprintPanel({
   showSkeleton,
   tools,
   onChangeTools,
+  promptRef: externalPromptRef,
   activeTab,
   onChangeTab,
   subAgents,
@@ -34,7 +35,8 @@ export function BlueprintPanel({
   canRollback,
   onRollback,
 }) {
-  const promptRef = useRef(null)
+  const localPromptRef = useRef(null)
+  const promptRef = externalPromptRef || localPromptRef
 
   useEffect(() => {
     if (!promptRef.current) return
