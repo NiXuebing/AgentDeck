@@ -1,4 +1,3 @@
-import { TOOL_LABELS } from '../../constants/tools'
 import { ChatMessage } from './ChatMessage'
 
 export function StagePanel({
@@ -85,41 +84,14 @@ export function StagePanel({
           ) : null}
         </section>
       ) : null}
-      {toolSuggestion?.suggested_tools?.length ? (
-        <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-                Tool Suggestion
-              </p>
-              <p className="mt-1 text-sm text-emerald-700">
-                {toolSuggestion.reason || 'The agent could benefit from extra tools.'}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-emerald-800">
-                {toolSuggestion.suggested_tools.map((tool) => (
-                  <span
-                    key={tool}
-                    className="rounded-full border border-emerald-200 bg-white/80 px-3 py-1 font-semibold"
-                  >
-                    {TOOL_LABELS[tool] || tool}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button
-              className="rounded-full bg-emerald-700 px-4 py-2 text-xs font-semibold text-white"
-              onClick={() => onAddSuggestedTools?.(toolSuggestion.suggested_tools)}
-              type="button"
-            >
-              Add tool
-            </button>
-          </div>
-        </section>
-      ) : null}
       <div className="glass-strong flex min-h-[240px] flex-col gap-3 overflow-y-auto p-4">
         {messages?.length ? (
           messages.map((message, index) => (
-            <ChatMessage key={`${message.role}-${index}`} message={message} />
+            <ChatMessage
+              key={`${message.role}-${index}`}
+              message={message}
+              onAddSuggestedTools={onAddSuggestedTools}
+            />
           ))
         ) : (
           <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-4 py-6 text-sm text-neutral-500">

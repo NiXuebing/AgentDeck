@@ -484,6 +484,24 @@ function App() {
   })
 
   useEffect(() => {
+    if (!workbenchController.toolSuggestion || !selectedAgentId) return
+    const suggestion = workbenchController.toolSuggestion
+    updateMessages(selectedAgentId, (current) => [
+      ...current,
+      {
+        role: 'meta',
+        content: suggestion.reason || 'Tool suggestion',
+        metadata: {
+          type: 'suggestion',
+          suggestedTools: suggestion.suggested_tools || [],
+          reason: suggestion.reason,
+        },
+      },
+    ])
+    workbenchController.clearToolSuggestion()
+  }, [selectedAgentId, updateMessages, workbenchController])
+
+  useEffect(() => {
     if (workbenchController.pollingPaused) return undefined
     fetchAgents()
     const interval = setInterval(fetchAgents, 6000)
