@@ -1,4 +1,5 @@
 import { TOOL_LABELS } from '../../constants/tools'
+import { ChatMessage } from './ChatMessage'
 
 export function StagePanel({
   messages,
@@ -109,9 +110,7 @@ export function StagePanel({
       <div className="glass-strong flex min-h-[240px] flex-col gap-3 overflow-y-auto p-4">
         {messages?.length ? (
           messages.map((message, index) => (
-            <div key={`${message.role}-${index}`} className="text-sm text-neutral-700">
-              {message.content}
-            </div>
+            <ChatMessage key={`${message.role}-${index}`} message={message} />
           ))
         ) : (
           <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-4 py-6 text-sm text-neutral-500">
