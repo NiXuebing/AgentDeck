@@ -56,6 +56,13 @@ export const ALL_TOOLS = Object.values(TOOL_GROUPS)
   .flatMap((group) => group.tools)
   .map((tool) => tool.name)
 
+export const TOOL_LABELS = Object.values(TOOL_GROUPS)
+  .flatMap((group) => group.tools)
+  .reduce((acc, tool) => {
+    acc[tool.name] = tool.description
+    return acc
+  }, {})
+
 export const MODELS = [
   { value: 'inherit', label: '继承父级' },
   { value: 'sonnet', label: 'Sonnet（均衡）' },

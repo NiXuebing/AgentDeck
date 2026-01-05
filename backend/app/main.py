@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,7 +16,9 @@ from starlette.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from dotenv import load_dotenv
 
+from .blueprint_generator import BlueprintGenerator
 from .docker_mgr import AgentRecord, DockerManager
+from .intent_router import IntentRouter
 from .session_mgr import SessionManager
 
 
@@ -25,7 +28,44 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-app = FastAPI(title="AgentDeck API", version="0.1.0")
+
+docker_mgr = DockerManager()
+SESSION_IDLE_MINUTES = int(os.environ.get("AGENTDECK_SESSION_IDLE_MINUTES", "60"))
+SESSION_SWEEP_SECONDS = int(os.environ.get("AGENTDECK_SESSION_SWEEP_SECONDS", "60"))
+session_mgr = SessionManager(docker_mgr, idle_minutes=SESSION_IDLE_MINUTES)
+cleanup_task: Optional[asyncio.Task] = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    global cleanup_task
+    if SESSION_IDLE_MINUTES > 0:
+        async def cleanup_loop():
+            while True:
+                try:
+                    idle_sessions = session_mgr.get_idle_sessions()
+                    for session_id in idle_sessions:
+                        await asyncio.to_thread(session_mgr.stop_session, session_id)
+                except Exception as exc:
+                    logger.warning("Session cleanup loop failed: %s", exc)
+                await asyncio.sleep(max(SESSION_SWEEP_SECONDS, 10))
+
+        cleanup_task = asyncio.create_task(cleanup_loop())
+
+    try:
+        yield
+    finally:
+        if cleanup_task is None:
+            return
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+        cleanup_task = None
+
+
+app = FastAPI(title="AgentDeck API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,13 +73,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-docker_mgr = DockerManager()
-SESSION_IDLE_MINUTES = int(os.environ.get("AGENTDECK_SESSION_IDLE_MINUTES", "60"))
-SESSION_SWEEP_SECONDS = int(os.environ.get("AGENTDECK_SESSION_SWEEP_SECONDS", "60"))
-session_mgr = SessionManager(docker_mgr, idle_minutes=SESSION_IDLE_MINUTES)
-cleanup_task: Optional[asyncio.Task] = None
 
 
 class SpawnAgentRequest(BaseModel):
@@ -97,6 +130,35 @@ class ResumeRequest(BaseModel):
     mcp_env: Optional[Dict[str, Dict[str, str]]] = None
 
 
+class ConfigReloadRequest(BaseModel):
+    config: Dict[str, Any]
+    mcp_env: Optional[Dict[str, Dict[str, str]]] = None
+
+
+class ConfigReloadResponse(BaseModel):
+    agent: "AgentInfo"
+    session_id: str
+    session_token: str
+
+
+class BlueprintRequest(BaseModel):
+    prompt: str
+
+
+class BlueprintResponse(BaseModel):
+    config: Dict[str, Any]
+
+
+class IntentRequest(BaseModel):
+    user_text: str
+    assistant_text: Optional[str] = None
+
+
+class IntentResponse(BaseModel):
+    suggested_tools: List[str]
+    reason: Optional[str] = None
+
+
 class AgentInfo(BaseModel):
     agent_id: str
     config_id: str
@@ -106,6 +168,9 @@ class AgentInfo(BaseModel):
     session_id: Optional[str] = None
     host_port: Optional[int] = None
     created_at: datetime
+
+
+ConfigReloadResponse.model_rebuild()
 
 
 def record_to_info(record: AgentRecord) -> AgentInfo:
@@ -147,40 +212,41 @@ def require_session(agent_id: str) -> str:
     return session_id
 
 
-@app.on_event("startup")
-async def start_session_cleanup():
-    global cleanup_task
-    if SESSION_IDLE_MINUTES <= 0:
-        return
-
-    async def cleanup_loop():
-        while True:
-            try:
-                idle_sessions = session_mgr.get_idle_sessions()
-                for session_id in idle_sessions:
-                    await asyncio.to_thread(session_mgr.stop_session, session_id)
-            except Exception as exc:
-                logger.warning("Session cleanup loop failed: %s", exc)
-            await asyncio.sleep(max(SESSION_SWEEP_SECONDS, 10))
-
-    cleanup_task = asyncio.create_task(cleanup_loop())
-
-
-@app.on_event("shutdown")
-async def stop_session_cleanup():
-    global cleanup_task
-    if cleanup_task is None:
-        return
-    cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
-
-
 @app.get("/health")
 def health_check() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/blueprints/preview", response_model=BlueprintResponse)
+async def preview_blueprint(
+    request: BlueprintRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-Api-Key"),
+):
+    api_key = x_api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY is required")
+    generator = BlueprintGenerator(api_key=api_key)
+    try:
+        result = await generator.generate(request.prompt)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return BlueprintResponse(config=result.get("config", {}))
+
+
+@app.post("/api/agents/intent", response_model=IntentResponse)
+async def suggest_tools(
+    request: IntentRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-Api-Key"),
+):
+    api_key = x_api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="ANTHROPIC_API_KEY is required")
+    router = IntentRouter(api_key=api_key)
+    try:
+        result = await router.suggest_tools(request.user_text, request.assistant_text)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return IntentResponse(**result)
 
 
 @app.post("/api/agents", response_model=AgentInfo)
@@ -437,6 +503,58 @@ async def rotate_agent_token(
 
     new_token = await run_in_threadpool(session_mgr.rotate_token, session_id)
     return {"session_id": session_id, "session_token": new_token}
+
+
+@app.patch("/api/agents/{agent_id}/config", response_model=ConfigReloadResponse)
+async def reload_agent_config(
+    agent_id: str,
+    request: ConfigReloadRequest,
+    session_token: Optional[str] = Header(default=None, alias="X-Session-Token"),
+    authorization: Optional[str] = Header(default=None),
+):
+    session_id = require_session(agent_id)
+    if not session_mgr.authorize(session_id, session_token, authorization):
+        raise HTTPException(status_code=403, detail="invalid session token")
+
+    agent_record = docker_mgr.get_agent_record(agent_id)
+    prior_config = None
+    if agent_record and agent_record.config_path.exists():
+        try:
+            prior_config = json.loads(agent_record.config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            prior_config = None
+
+    async def start_with_fallback() -> AgentRecord:
+        try:
+            return await run_in_threadpool(session_mgr.start_session, session_id, None, request.mcp_env)
+        except KeyError as exc:
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Agent container missing; ANTHROPIC_API_KEY is required to recreate it",
+                ) from exc
+            return await run_in_threadpool(session_mgr.start_session, session_id, api_key, request.mcp_env)
+
+    await run_in_threadpool(session_mgr.stop_session, session_id)
+    try:
+        await run_in_threadpool(docker_mgr.update_agent_config, agent_id, request.config)
+    except Exception as exc:
+        if prior_config:
+            try:
+                await run_in_threadpool(docker_mgr.update_agent_config, agent_id, prior_config)
+            except Exception:
+                pass
+        await start_with_fallback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    record = await start_with_fallback()
+    new_token = await run_in_threadpool(session_mgr.rotate_token, session_id)
+    return ConfigReloadResponse(
+        agent=record_to_info(record),
+        session_id=session_id,
+        session_token=new_token,
+    )
 
 
 @app.post("/api/agents/chat")

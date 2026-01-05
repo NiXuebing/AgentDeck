@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SubAgentEditor } from './components/SubAgentEditor'
-import CreateView from './components/views/CreateView'
-import RunView from './components/views/RunView'
+import WorkbenchView from './components/views/WorkbenchView'
+import { BlueprintPanel } from './components/workbench/BlueprintPanel'
+import { StagePanel } from './components/workbench/StagePanel'
 import { DEFAULT_TOOLS } from './constants/tools'
+import { WorkbenchContext } from './context/WorkbenchContext'
+import { WORKBENCH_STATES, useWorkbenchController } from './hooks/useWorkbenchController'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const WS_BASE = API_BASE
@@ -60,6 +63,7 @@ function App() {
   const [sessionByAgent, setSessionByAgent] = useState(() => readSessionStore())
   const [messageInput, setMessageInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [logsOpen, setLogsOpen] = useState(false)
   const [form, setForm] = useState({
     configId: '',
     name: '',
@@ -82,6 +86,7 @@ function App() {
   const [activeView, setActiveView] = useState('create')
   const [editingSubAgent, setEditingSubAgent] = useState(null)
   const [isAddingSubAgent, setIsAddingSubAgent] = useState(false)
+  const hasDraftChanges = true
 
   const messagesEndRef = useRef(null)
 
@@ -129,6 +134,35 @@ function App() {
   }, [form, mcpServersParsed.data, subAgents, skills, commands])
   const previewConfig = useMemo(() => JSON.parse(configPreview), [configPreview])
 
+  const hydrateFormFromConfig = (config) => {
+    if (!config) return
+    setForm((prev) => ({
+      ...prev,
+      configId: config.id || '',
+      name: config.name || '',
+      description: config.description || '',
+      systemPrompt: config.system_prompt || '',
+      useCustomPrompt: Boolean(config.system_prompt),
+      allowedTools: Array.isArray(config.allowed_tools) ? config.allowed_tools : prev.allowedTools,
+      permissionMode: config.permission_mode || prev.permissionMode,
+      maxTurns: config.max_turns ? String(config.max_turns) : prev.maxTurns,
+      model: config.model || prev.model,
+    }))
+
+    if (config.mcp_servers) {
+      setMcpServersJson(JSON.stringify(config.mcp_servers, null, 2))
+    }
+    if (config.agents) {
+      setSubAgents(config.agents)
+    }
+    if (config.skills) {
+      setSkills(config.skills)
+    }
+    if (config.commands) {
+      setCommands(config.commands)
+    }
+  }
+
   const messages = useMemo(
     () => (selectedAgentId ? chatByAgent[selectedAgentId] || [] : []),
     [chatByAgent, selectedAgentId]
@@ -138,6 +172,15 @@ function App() {
     [agents, selectedAgentId]
   )
   const isAgentRunning = selectedAgent?.status === 'running'
+  const handleToggleLogs = useCallback(() => {
+    setLogsOpen((prev) => !prev)
+  }, [])
+  const handleSessionUpdate = useCallback((agentId, sessionId, sessionToken) => {
+    setSessionByAgent((prev) => ({
+      ...prev,
+      [agentId]: { sessionId, sessionToken },
+    }))
+  }, [])
   const statusTextMap = {
     running: '运行中',
     stopped: '已停止',
@@ -178,20 +221,6 @@ function App() {
       setLoading(false)
     }
   }, [selectedAgentId])
-
-  useEffect(() => {
-    fetchAgents()
-    const interval = setInterval(fetchAgents, 6000)
-    return () => clearInterval(interval)
-  }, [fetchAgents])
-
-  useEffect(() => {
-    writeSessionStore(sessionByAgent)
-  }, [sessionByAgent])
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, selectedAgentId])
 
 
   const handleAddSubAgent = () => {
@@ -261,6 +290,7 @@ function App() {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let assistantText = ''
 
     while (true) {
       const { value, done } = await reader.read()
@@ -284,6 +314,7 @@ function App() {
           if (event.type === 'message' && event.data?.type === 'content') {
             const chunk = event.data.content || ''
             if (!chunk) continue
+            assistantText += chunk
             updateMessages(agentId, (current) => {
               const next = current.slice()
               const last = next[next.length - 1]
@@ -309,6 +340,8 @@ function App() {
         }
       }
     }
+
+    return assistantText
   }
 
   const handleSendMessage = async () => {
@@ -344,7 +377,15 @@ function App() {
     ])
 
     try {
-      await streamChat(selectedAgentId, session.sessionId, session.sessionToken, outgoingMessages)
+      const assistantText = await streamChat(
+        selectedAgentId,
+        session.sessionId,
+        session.sessionToken,
+        outgoingMessages
+      )
+      if (assistantText) {
+        await workbenchController.requestToolSuggestion({ userText: query, assistantText })
+      }
     } catch (error) {
       updateMessages(selectedAgentId, (current) => [
         ...current,
@@ -354,6 +395,18 @@ function App() {
       finalizeAssistant(selectedAgentId)
       setIsStreaming(false)
     }
+  }
+
+  const handleAddSuggestedTools = async (tools) => {
+    if (!Array.isArray(tools) || tools.length === 0) return
+    const existing = Array.isArray(form.allowedTools)
+      ? form.allowedTools
+      : parseList(form.allowedTools || '')
+    const nextAllowed = Array.from(new Set([...existing, ...tools]))
+    setForm((prev) => ({ ...prev, allowedTools: nextAllowed }))
+    const nextConfig = { ...previewConfig, allowed_tools: nextAllowed }
+    await workbenchController.handleApplyConfig(nextConfig)
+    workbenchController.clearToolSuggestion()
   }
 
   const handleLaunch = async () => {
@@ -397,13 +450,37 @@ function App() {
       }))
       await fetchAgents()
       setSelectedAgentId(created.agent_id)
-      setActiveView('run')
     } catch (error) {
       setErrorMessage(error.message)
     } finally {
       setLaunching(false)
     }
   }
+
+  const workbenchController = useWorkbenchController({
+    apiBase: API_BASE,
+    onHydrateConfig: hydrateFormFromConfig,
+    onLaunch: handleLaunch,
+    configPreview,
+    selectedAgentId,
+    sessionByAgent,
+    onSessionUpdate: handleSessionUpdate,
+  })
+
+  useEffect(() => {
+    if (workbenchController.pollingPaused) return undefined
+    fetchAgents()
+    const interval = setInterval(fetchAgents, 6000)
+    return () => clearInterval(interval)
+  }, [fetchAgents, workbenchController.pollingPaused])
+
+  useEffect(() => {
+    writeSessionStore(sessionByAgent)
+  }, [sessionByAgent])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, selectedAgentId])
 
   const handleStop = async (agentId) => {
     setErrorMessage('')
@@ -484,8 +561,9 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen px-6 py-8 lg:px-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+    <WorkbenchContext.Provider value={workbenchController}>
+      <div className="min-h-screen px-6 py-8 lg:px-10">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <header className="glass grid-dots reveal flex flex-col gap-4 p-6" style={{ '--delay': '0ms' }}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -519,7 +597,7 @@ function App() {
           ) : null}
         </header>
 
-        <main className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)_360px] xl:grid-cols-[300px_minmax(0,1fr)_420px]">
+        <main className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="glass reveal flex flex-col gap-4 p-5" style={{ '--delay': '80ms' }}>
             <div className="flex items-center justify-between">
               <h2 className="section-title">运行中的 Agent</h2>
@@ -604,47 +682,55 @@ function App() {
             </div>
           </aside>
 
-          {activeView === 'create' ? (
-            <CreateView
-              launching={launching}
-              onLaunch={handleLaunch}
-              canGoToRun={Boolean(selectedAgentId)}
-              onGoToRun={() => setActiveView('run')}
-              activeConfigTab={activeConfigTab}
-              onChangeConfigTab={setActiveConfigTab}
-              form={form}
-              onChangeForm={setForm}
-              mcpServersJson={mcpServersJson}
-              onMcpServersChange={setMcpServersJson}
-              subAgents={subAgents}
-              onAddSubAgent={handleAddSubAgent}
-              onEditSubAgent={handleEditSubAgent}
-              onDeleteSubAgent={handleDeleteSubAgent}
-              skills={skills}
-              onChangeSkills={setSkills}
-              commands={commands}
-              onChangeCommands={setCommands}
-              previewConfig={previewConfig}
-            />
-          ) : (
-            <div className="lg:col-span-2">
-              <RunView
-                selectedAgentId={selectedAgentId}
-                selectedAgent={selectedAgent}
-                isAgentRunning={isAgentRunning}
-                onStopAgent={handleStop}
-                onStartAgent={handleStart}
-                onConfigure={() => setActiveView('create')}
-                messages={messages}
-                messageInput={messageInput}
-                onMessageInput={setMessageInput}
-                onSendMessage={handleSendMessage}
-                isStreaming={isStreaming}
-                messagesEndRef={messagesEndRef}
-                wsBase={WS_BASE}
+          <WorkbenchView
+            blueprint={(
+              <BlueprintPanel
+                form={form}
+                onChangeForm={setForm}
+                activeTab={activeConfigTab}
+                onChangeTab={setActiveConfigTab}
+                subAgents={subAgents}
+                skills={skills}
+                commands={commands}
+                onAddSubAgent={handleAddSubAgent}
+                onEditSubAgent={handleEditSubAgent}
+                onDeleteSubAgent={handleDeleteSubAgent}
+                onChangeSkills={setSkills}
+                onChangeCommands={setCommands}
+                onApply={workbenchController.handleApplyConfig}
+                hasDraftChanges={hasDraftChanges}
+                mcpServersJson={mcpServersJson}
+                onMcpServersChange={setMcpServersJson}
+                isReloading={workbenchController.state === WORKBENCH_STATES.RELOADING}
+                reloadError={workbenchController.reloadError}
+                canRollback={workbenchController.canRollback}
+                onRollback={workbenchController.handleRollback}
               />
-            </div>
-          )}
+            )}
+            stage={(
+              <StagePanel
+                messages={messages}
+                onSend={handleSendMessage}
+                input={messageInput}
+                onInput={setMessageInput}
+                logsOpen={logsOpen}
+                onToggleLogs={handleToggleLogs}
+                renderLogs={() => (
+                  <div className="text-xs text-neutral-600">Live logs</div>
+                )}
+                showArchitect={!selectedAgentId}
+                architectPrompt={workbenchController.architectPrompt}
+                onArchitectPrompt={workbenchController.setArchitectPrompt}
+                onArchitectSubmit={workbenchController.handleArchitectSubmit}
+                showKeyPrompt={workbenchController.showKeyPrompt}
+                architectApiKey={workbenchController.architectApiKey}
+                onArchitectApiKey={workbenchController.setArchitectApiKey}
+                architectError={workbenchController.architectError}
+                toolSuggestion={workbenchController.toolSuggestion}
+                onAddSuggestedTools={handleAddSuggestedTools}
+              />
+            )}
+          />
         </main>
 
         {activeView === 'create' && (editingSubAgent || isAddingSubAgent) && (
@@ -658,8 +744,9 @@ function App() {
             }}
           />
         )}
+        </div>
       </div>
-    </div>
+    </WorkbenchContext.Provider>
   )
 }
 

@@ -1,5 +1,5 @@
 import { act } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import App from '../App'
 
@@ -42,22 +42,22 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('renders quick create entry', async () => {
+test('renders the workbench layout', async () => {
   await renderApp()
   await waitFor(() => {
-    expect(screen.getByText(/启动 Agent/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Blueprint' })).toBeInTheDocument()
   })
+  expect(screen.getByRole('heading', { name: 'Stage' })).toBeInTheDocument()
 })
 
-test('create view shows quick create card and wizard entry', async () => {
+test('shows the architect panel before any agent is selected', async () => {
   await renderApp()
-  expect(screen.getByText(/快速创建/i)).toBeInTheDocument()
-  expect(screen.getByText(/向导创建/i)).toBeInTheDocument()
+  expect(screen.getByText(/Architect/i)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Generate' })).toBeInTheDocument()
 })
 
-test('switches to run view after create', async () => {
+test('stage panel exposes message input and send button', async () => {
   await renderApp()
-  const createButton = await screen.findByRole('button', { name: /创建并启动/i })
-  fireEvent.click(createButton)
-  expect(await screen.findByText(/对话/i)).toBeInTheDocument()
+  expect(screen.getByPlaceholderText('Message')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
 })

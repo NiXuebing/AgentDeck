@@ -218,6 +218,34 @@ class DockerManager:
             self.agents[agent_id] = record
         return record
 
+    def update_agent_config(self, agent_id: str, config: Dict[str, Any]) -> AgentRecord:
+        with self._lock:
+            record = self.agents.get(agent_id)
+        if not record:
+            raise KeyError(f"Unknown agent: {agent_id}")
+
+        normalized = self._normalize_config(config)
+        record.config_id = normalized.get("id", record.config_id)
+        record.config_path = self._write_config(agent_id, normalized)
+
+        agents_config = normalized.get("agents")
+        skills_config = normalized.get("skills")
+        commands_config = normalized.get("commands")
+        if agents_config or skills_config or commands_config:
+            agent_dir = self.state_dir / agent_id
+            generate_claude_directory(
+                base_path=agent_dir,
+                config=normalized,
+                agents=agents_config,
+                skills=skills_config,
+                commands=commands_config,
+            )
+        return record
+
+    def get_agent_record(self, agent_id: str) -> Optional[AgentRecord]:
+        with self._lock:
+            return self.agents.get(agent_id)
+
     def list_agents(self, refresh: bool = True) -> Dict[str, AgentRecord]:
         if not refresh:
             with self._lock:

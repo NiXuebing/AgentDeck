@@ -107,6 +107,9 @@ npm run dev
 - `POST /api/agents/{agent_id}/stop`
 - `POST /api/agents/{agent_id}/start`
 - `POST /api/agents/{agent_id}/rotate-token`
+- `PATCH /api/agents/{agent_id}/config`
+- `POST /api/blueprints/preview`
+- `POST /api/agents/intent`
 - `WS /ws/agents/{agent_id}/logs`
 
 ### Create an agent
@@ -181,6 +184,46 @@ curl -N http://localhost:8000/api/agents/chat \
 ```bash
 curl -X POST http://localhost:8000/api/agents/sessions/{session_id}/rotate-token \
   -H "X-Session-Token: <session_token>"
+```
+
+### Preview a blueprint (Genesis)
+
+```bash
+curl -X POST http://localhost:8000/api/blueprints/preview \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: <anthropic_api_key>" \
+  -d '{
+    "prompt": "Draft a research assistant with web tools"
+  }'
+```
+
+### Reload agent config
+
+```bash
+curl -X PATCH http://localhost:8000/api/agents/{agent_id}/config \
+  -H "Content-Type: application/json" \
+  -H "X-Session-Token: <session_token>" \
+  -d '{
+    "config": {
+      "id": "code-assistant",
+      "name": "Code Assistant",
+      "allowed_tools": ["Read", "Write", "Bash"],
+      "permission_mode": "acceptEdits",
+      "max_turns": 40
+    }
+  }'
+```
+
+### Suggest tools (intent router)
+
+```bash
+curl -X POST http://localhost:8000/api/agents/intent \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: <anthropic_api_key>" \
+  -d '{
+    "user_text": "Find the latest AI news",
+    "assistant_text": "I can help with that."
+  }'
 ```
 
 ## Agent Customization
