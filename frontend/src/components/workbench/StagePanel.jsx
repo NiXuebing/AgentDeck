@@ -1,4 +1,5 @@
 import { ChatMessage } from './ChatMessage'
+import { LogsDrawer } from './LogsDrawer'
 
 export function StagePanel({
   messages,
@@ -111,7 +112,9 @@ export function StagePanel({
           Send
         </button>
       </div>
-      {logsOpen ? <div className="rounded-2xl border border-black/10 bg-white/80 p-3">{renderLogs?.()}</div> : null}
+      <LogsDrawer open={logsOpen} onClose={() => onToggleLogs?.()}>
+        {renderLogs?.()}
+      </LogsDrawer>
     </div>
   )
 }
