@@ -9,6 +9,7 @@ export function StagePanel({
   logsOpen,
   onToggleLogs,
   renderLogs,
+  isReloading,
   showArchitect,
   architectPrompt,
   onArchitectPrompt,
@@ -22,6 +23,14 @@ export function StagePanel({
 }) {
   return (
     <div className="flex h-full flex-col gap-4">
+      {isReloading ? (
+        <div
+          className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-700"
+          data-testid="stage-reloading"
+        >
+          Reloading
+        </div>
+      ) : null}
       <header className="flex items-center justify-between">
         <div>
           <h2 className="section-title">Stage</h2>

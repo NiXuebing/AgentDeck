@@ -34,11 +34,6 @@ export function BlueprintPanel({
           <p className="text-xs text-neutral-500">Drafting the agent configuration.</p>
         </div>
         <div className="flex items-center gap-2">
-          {isReloading ? (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-700">
-              Reloading
-            </span>
-          ) : null}
           {reloadError && canRollback ? (
             <button
               className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-xs font-semibold text-rose-600"

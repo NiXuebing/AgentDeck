@@ -718,6 +718,7 @@ function App() {
                 renderLogs={() => (
                   <div className="text-xs text-neutral-600">Live logs</div>
                 )}
+                isReloading={workbenchController.state === WORKBENCH_STATES.RELOADING}
                 showArchitect={!selectedAgentId}
                 architectPrompt={workbenchController.architectPrompt}
                 onArchitectPrompt={workbenchController.setArchitectPrompt}

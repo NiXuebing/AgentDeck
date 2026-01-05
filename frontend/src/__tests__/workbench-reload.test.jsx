@@ -51,7 +51,7 @@ it('shows reloading banner when applying config', async () => {
   fireEvent.click(screen.getByRole('button', { name: /agent-1/i }))
   await waitFor(() => expect(screen.queryByText(/Architect/i)).not.toBeInTheDocument())
   fireEvent.click(screen.getByRole('button', { name: /Apply/i }))
-  expect(await screen.findByText(/Reloading/i)).toBeInTheDocument()
+  expect(await screen.findByTestId('stage-reloading')).toBeInTheDocument()
   await act(async () => {
     resolveConfig({ session_id: 's2', session_token: 't2' })
   })
