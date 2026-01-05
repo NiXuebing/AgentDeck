@@ -45,7 +45,7 @@ afterEach(() => {
 test('renders the workbench layout', async () => {
   await renderApp()
   await waitFor(() => {
-    expect(screen.getByRole('heading', { name: 'Blueprint' })).toBeInTheDocument()
+    expect(screen.getByTestId('blueprint-skeleton')).toBeInTheDocument()
   })
   expect(screen.getByRole('heading', { name: 'Stage' })).toBeInTheDocument()
 })
